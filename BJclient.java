@@ -27,22 +27,29 @@ public class BJclient {
                 System.out.println("Your ID: " + ID);
                 System.out.println("Your chip: " + chip);
 
-                System.out.println("Type LIST to see current players, END to exit.");
+                System.out.println("Type LIST to see current players, END to exit, OK to start.");
 
+                // サーバーからのメッセージ受信用スレッド
+                Thread readerThread = new Thread(() -> {
+                    try {
+                        String line;
+                        while ((line = in.readLine()) != null) {
+                            // 画面に出力
+                            System.out.println(line);
+                        }
+                    } catch (IOException e) {
+                        System.out.println("Connection closed by server.");
+                    }
+                });
+                readerThread.setDaemon(true); // メイン終了時に自動で終了
+                readerThread.start();
+
+                // ユーザー入力待機と送信ループ
                 String str;
                 while (true) {
                     str = scan.nextLine();
                     out.println(str);
                     if (str.equals("END")) break;
-
-                    // プレイヤーリストの応答表示
-                    if (str.equals("LIST")) {
-                        String line;
-                        while (!(line = in.readLine()).equals("=== End of List ===")) {
-                            System.out.println(line);
-                        }
-                        System.out.println(line);
-                    }
                 }
 
                 System.out.println("Disconnected.");

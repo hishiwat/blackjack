@@ -5,6 +5,7 @@ import java.util.*;
 public class BJserver {
     public static final int PORT = 8080;
     private static int idCounter = 0;
+    private static boolean gameInProgress = false; // ゲーム進行中フラグ
 
     // プレイヤーリスト（スレッドセーフ）
     private static List<Player> players = Collections.synchronizedList(new ArrayList<>());
@@ -45,7 +46,7 @@ public class BJserver {
                     playerId = ++idCounter;
                 }
 
-                Player player = new Player(name, playerId);
+                Player player = new Player(name, playerId, out);
                 players.add(player);  // リストに追加
 
                 System.out.println("User ID: " + player.getID() + " Name: " + player.getName());
@@ -67,6 +68,29 @@ public class BJserver {
                         }
                         out.println("=== End of List ===");
                     }
+
+					// ゲーム開始の応答表示
+					if (line.equals("OK")) {
+						player.setReady(true);
+						boolean allOk = true;
+						for (Player p : players) {
+							if (!p.isReady()) {
+								allOk = false;
+								break;
+							}
+						}
+						if (allOk && !gameInProgress) {
+							// ゲーム開始状態に移行
+							gameInProgress = true;
+							System.out.println("=== GAME START ===");
+							for (Player p : players) {
+								p.sendMessage("Game Start");
+							}
+							
+						} else {
+							out.println("Waiting for all players to be ready...");
+						}
+					}
                 }
 
             } catch (IOException e) {
@@ -87,11 +111,15 @@ class Player {
     private String name;
     private int id;
     private int chip;
+	private boolean isReady;
+	private PrintWriter out;
 
-    public Player(String name, int id){
+    public Player(String name, int id, PrintWriter out){
         this.name = name;
         this.id = id;
         this.chip = 500;
+		this.isReady = false;
+		this.out = out;
     }
 
     public String getName(){
@@ -105,4 +133,16 @@ class Player {
     public int getChip(){
         return chip;
     }
+
+	public boolean isReady(){
+		return isReady;
+	}
+
+	public void setReady(boolean isReady){
+		this.isReady = isReady;
+	}
+
+	public void sendMessage(String message){
+		out.println(message);
+	}
 }
