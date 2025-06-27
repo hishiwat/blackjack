@@ -11,13 +11,41 @@ public class BJserver {
     private static List<Player> players = Collections.synchronizedList(new ArrayList<>());
 
     public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = new ServerSocket(PORT);
+        // すべてのネットワークインターフェースで接続を受け付ける
+        ServerSocket serverSocket = new ServerSocket(PORT, 0, InetAddress.getByName("0.0.0.0"));
+        
+        // サーバーのIPアドレスを表示
         System.out.println("Server started on port " + PORT);
+        System.out.println("Server IP addresses:");
+        try {
+            InetAddress localHost = InetAddress.getLocalHost();
+            System.out.println("Local IP: " + localHost.getHostAddress());
+            
+            // すべてのネットワークインターフェースを列挙
+            Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
+            while (networkInterfaces.hasMoreElements()) {
+                NetworkInterface networkInterface = networkInterfaces.nextElement();
+                if (networkInterface.isLoopback() || !networkInterface.isUp()) {
+                    continue;
+                }
+                
+                Enumeration<InetAddress> addresses = networkInterface.getInetAddresses();
+                while (addresses.hasMoreElements()) {
+                    InetAddress address = addresses.nextElement();
+                    if (address instanceof Inet4Address) {
+                        System.out.println("Network IP: " + address.getHostAddress() + " (" + networkInterface.getDisplayName() + ")");
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting network information: " + e.getMessage());
+        }
+        System.out.println("Waiting for connections...");
 
         try {
             while (true) {
                 Socket socket = serverSocket.accept();
-                System.out.println("Connection accepted: " + socket);
+                System.out.println("Connection accepted from: " + socket.getInetAddress().getHostAddress());
                 new Thread(new ClientHandler(socket)).start();
             }
         } finally {
