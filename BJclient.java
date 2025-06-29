@@ -148,6 +148,7 @@ public class BJclient {
                             line = in.readLine();
                             if (line != null && line.startsWith("Dealer Card ")) {
                                 String dealerCard = line.substring("Dealer Card ".length()).trim();
+                                dealerCardList.add(dealerCard);
                                 SwingUtilities.invokeLater(() -> addMessage("Dealer's Card: " + dealerCard));
                             }
                         }
