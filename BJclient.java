@@ -3,6 +3,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.*;
+import java.util.ArrayList;
 
 public class BJclient {
     private JFrame frame;
@@ -17,10 +18,17 @@ public class BJclient {
     private String playerName;
     private int playerID;
     private int chip;
+    private Player player;
+    private ArrayList<String> dealerCardList = new ArrayList<>();
     private boolean isConnected = false;
 
     public BJclient() {
         createGUI();
+
+        // 名前入力ダイアログ
+        showNameDialog();
+
+        connectToServer();
     }
 
     private void createGUI() {
@@ -58,10 +66,10 @@ public class BJclient {
         readyButton = new JButton("Ready (OK)");
         listButton = new JButton("Show Players (LIST)");
         JButton disconnectButton = new JButton("Disconnect (END)");
-        
+
         readyButton.setEnabled(false);
         listButton.setEnabled(false);
-        
+
         buttonPanel.add(readyButton);
         buttonPanel.add(listButton);
         buttonPanel.add(disconnectButton);
@@ -73,16 +81,12 @@ public class BJclient {
         readyButton.addActionListener(e -> sendReady());
         listButton.addActionListener(e -> sendList());
         disconnectButton.addActionListener(e -> disconnect());
-
-        // 名前入力ダイアログ
-        showNameDialog();
     }
 
     private void showNameDialog() {
         String name = JOptionPane.showInputDialog(frame, "Enter your name:", "Player Name", JOptionPane.PLAIN_MESSAGE);
         if (name != null && !name.trim().isEmpty()) {
             playerName = name.trim();
-            connectToServer();
         } else {
             System.exit(0);
         }
@@ -92,35 +96,65 @@ public class BJclient {
         try {
             int port = BJserver.PORT;
             InetAddress addr = InetAddress.getByName("localhost");
-            
+
             addMessage("Connecting to server at " + addr + ":" + port);
-            
+
             socket = new Socket(addr, port);
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
-            
+
             // 名前を送信
             out.println(playerName);
-            
+
             // プレイヤー情報を受信
             playerID = Integer.parseInt(in.readLine());
             chip = Integer.parseInt(in.readLine());
-            
+
             addMessage("Connected successfully!");
             addMessage("Your ID: " + playerID);
             addMessage("Your chip: " + chip);
-            
+
+            player = new Player(playerName, playerID, chip, out);
+
             isConnected = true;
             readyButton.setEnabled(true);
             listButton.setEnabled(true);
-            
+
             // サーバーからのメッセージ受信用スレッド
             Thread readerThread = new Thread(() -> {
                 try {
                     String line;
                     while ((line = in.readLine()) != null) {
                         final String message = line;
+                        System.out.println("[DEBUG] Received: " + message); // デバッグ用 受信したメッセージを標準出力に表示
                         SwingUtilities.invokeLater(() -> addMessage(message));
+                        if (message.equals("Game Start")) {
+                            game();
+
+                        }
+
+                        if (message.equals("Cards")) {
+                            // 2枚のカードを受け取りリストに格納
+                            for (int i = 0; i < 2; i++) {
+                                String card = in.readLine();
+                                player.setCard(card);
+                                SwingUtilities.invokeLater(() -> addMessage(card));
+                            }
+                            // デバッグ用 リストに格納されているかの確認
+                            // for (String c : player.getCards()) {
+                            // System.out.println(c);
+                            // }
+
+                            line = in.readLine();
+                            if (line != null && line.startsWith("Dealer Card ")) {
+                                String dealerCard = line.substring("Dealer Card ".length()).trim();
+                                SwingUtilities.invokeLater(() -> addMessage("Dealer's Card: " + dealerCard));
+                            }
+                        }
+
+                        // ここに追加すればよさそう?
+                        // if (message.equals("文字列")){操作()}
+
                     }
                 } catch (IOException e) {
                     SwingUtilities.invokeLater(() -> addMessage("Connection closed by server."));
@@ -128,12 +162,47 @@ public class BJclient {
             });
             readerThread.setDaemon(true);
             readerThread.start();
-            
+
         } catch (IOException e) {
             addMessage("Connection error: " + e.getMessage());
-            JOptionPane.showMessageDialog(frame, "Failed to connect to server: " + e.getMessage(), 
-                                        "Connection Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(frame, "Failed to connect to server: " + e.getMessage(),
+                    "Connection Error", JOptionPane.ERROR_MESSAGE);
         }
+    }
+
+    private void game() {
+
+        SwingUtilities.invokeLater(() -> {
+            while (true) {
+                String input = JOptionPane.showInputDialog(frame, "Enter chips to bet (you have " + chip + "):", "Bet",
+                        JOptionPane.PLAIN_MESSAGE);
+
+                if (input == null) {
+                    addMessage("Bet canceled.");
+                    return; // キャンセルされたら抜ける
+                }
+
+                try {
+                    int bet = Integer.parseInt(input.trim());
+
+                    if (bet <= 0) {
+                        JOptionPane.showMessageDialog(frame, "Bet must be more than 0.", "Invalid Bet",
+                                JOptionPane.WARNING_MESSAGE);
+                    } else if (bet > chip) {
+                        JOptionPane.showMessageDialog(frame, "You cannot bet more than your chips (" + chip + ").",
+                                "Invalid Bet", JOptionPane.WARNING_MESSAGE);
+                    } else {
+                        out.println("BET " + bet);
+                        addMessage("You bet: " + bet);
+                        break;
+                    }
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(frame, "Please enter a valid number.", "Invalid Input",
+                            JOptionPane.WARNING_MESSAGE);
+                }
+            }
+        });
+
     }
 
     private void sendReady() {
