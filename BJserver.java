@@ -130,6 +130,19 @@ public class BJserver {
                             out.println("Invalid bet format. Use: BET <amount>");
                         }
                     }
+
+                    if (line.equals("CONTINUE_YES")) {
+                        player.resetForNewRound();
+                        player.setState(PlayerState.READY);
+                        checkAllPlayersReadyForNextRound();
+                    }
+
+                    if (line.equals("CONTINUE_NO")) {
+                        player.setState(PlayerState.LOGOUT);
+                        // 他のプレイヤーを待たずに次のステップへ進む
+                        checkAllPlayersReadyForNextRound();
+                        break; // このプレイヤーのループを抜けて接続を終了する
+                    }
                 }
 
             } catch (IOException e) {
@@ -161,4 +174,108 @@ public class BJserver {
         }
     }
 
+    private static void judgeAndDistribute() {
+        int dealerScore = calculateScore(dealerCardList);
+        boolean dealerBust = dealerScore > 21;
+
+        if (dealerBust) {
+            broadcast("Dealer Busted!");
+        }
+
+        for (Player p : players) {
+            int playerScore = calculateScore(p.getCards());
+            boolean playerBust = playerScore > 21;
+            String resultMessage;
+
+            if (playerBust) {
+                // プレイヤーのバースト: ベットは没収 (ベット時に引かれているので何もしない)
+                resultMessage = "You Busted! You lose " + p.getBet() + " chips.";
+            } else if (dealerBust || playerScore > dealerScore) {
+                // プレイヤーの勝利
+                // ブラックジャック(2枚で21)の場合は2.5倍、それ以外は2倍
+                int winnings = (playerScore == 21 && p.getCards().size() == 2) ? (int)(p.getBet() * 2.5) : (p.getBet() * 2);
+                p.winChips(winnings);
+                resultMessage = "You Win! You get " + winnings + " chips.";
+            } else if (playerScore == dealerScore) {
+                // 引き分け
+                p.winChips(p.getBet()); // ベット額がそのまま戻る
+                resultMessage = "Push (Draw). Your bet of " + p.getBet() + " is returned.";
+            } else {
+                // プレイヤーの負け
+                resultMessage = "You Lose. You lose " + p.getBet() + " chips.";
+            }
+            p.sendMessage(resultMessage);
+            p.sendMessage("Your total chips: " + p.getChip());
+        }
+
+        //プレイヤーの継続意思を聞く
+        askForContinuation();
+    }
+
+    
+    //全てのプレイヤーに継続意思を確認するメッセージを送信
+    private static void askForContinuation() {
+        gameInProgress = false; // ゲーム自体は一旦終了
+        broadcast("CONTINUE?");
+    }
+    
+    
+    //継続しないプレイヤーをリストから削除し、次のラウンドの準備を確認する
+    private static synchronized void checkAllPlayersReadyForNextRound() {
+        // LOGOUT状態のプレイヤーがいればリストから削除
+        players.removeIf(p -> p.getState() == PlayerState.LOGOUT);
+
+        if (players.isEmpty()) {
+            System.out.println("All players left. Waiting for new connections.");
+            gameInProgress = false;
+            return;
+        }
+
+        // 残ったプレイヤー全員が次のラウンドの準備ができているか確認
+        for (Player p : players) {
+            if (p.getState() != PlayerState.READY) {
+                return; // まだ意思表示していないプレイヤーがいる
+            }
+        }
+
+        // 全員が継続を選択したら、次のゲームを開始する
+        System.out.println("All remaining players are ready. Starting next round.");
+        // 既存のゲーム開始ロジックを呼び出す
+        // checkAllPlayersReady();
+    }
+
+    /**
+     * 補助メソッド：手札の点数を計算する
+     * @param cards 手札のリスト
+     * @return 点数
+     */
+    private static int calculateScore(ArrayList<String> cards) {
+        int score = 0;
+        int aceCount = 0;
+        for (String card : cards) {
+            if (card.equals("A")) {
+                aceCount++;
+                score += 11;
+            } else if ("JQK10".contains(card)) {
+                score += 10;
+            } else {
+                score += Integer.parseInt(card);
+            }
+        }
+        while (score > 21 && aceCount > 0) {
+            score -= 10;
+            aceCount--;
+        }
+        return score;
+    }
+    
+    /**
+     * 補助メソッド：全プレイヤーにメッセージを送信する
+     * @param message 送信するメッセージ
+     */
+    private static void broadcast(String message) {
+        for (Player p : players) {
+            p.sendMessage(message);
+        }
+    }
 }
