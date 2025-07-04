@@ -40,18 +40,32 @@ public class BJserver {
                     BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
                     PrintWriter out = new PrintWriter(
                             new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true)) {
-                String name = in.readLine();
-                if (name == null || name.equals("END"))
-                    return;
-
+                String name;
                 int playerId;
-                synchronized (BJserver.class) {
-                    playerId = ++idCounter;
+                Player player;
+                while (true) {
+                    name = in.readLine();
+
+                    if (name == null || name.equals("END"))
+                        return;
+                    player = getPlayerByName(name);
+                    if (player != null) {
+                        if (!player.getOnlineState())
+                            break;
+                        out.println("UsedName");
+
+                    } else {
+                        synchronized (BJserver.class) {
+                            playerId = ++idCounter;
+                        }
+
+                        player = new Player(name, playerId, 500, out);
+                        players.add(player); // リストに追加
+
+                        break;
+                    }
                 }
-
-                Player player = new Player(name, playerId, 500, out);
-                players.add(player); // リストに追加
-
+                player.setOnline();
                 System.out.println("User ID: " + player.getID() + " Name: " + player.getName());
                 out.println(player.getID());
                 out.println(player.getChip());
@@ -59,15 +73,20 @@ public class BJserver {
                 // クライアントが END を送るまで待機
                 while (true) {
                     String line = in.readLine();
-                    if (line == null || line.equals("END"))
+                    if (line == null || line.equals("END")) {
+                        player.setOffline();
+                        System.out.println(player.getOnlineState());
                         break;
+                    }
 
                     // プレイヤー一覧を表示したい場合
                     if (line.equals("LIST")) {
                         out.println("=== Player List ===");
                         synchronized (players) {
                             for (Player p : players) {
-                                out.println("ID: " + p.getID() + ", Name: " + p.getName() + ", chip: " + p.getChip());
+                                if (p.getOnlineState())
+                                    out.println(
+                                            "ID: " + p.getID() + ", Name: " + p.getName() + ", chip: " + p.getChip());
                             }
                         }
                         out.println("=== End of List ===");
@@ -78,7 +97,8 @@ public class BJserver {
                         player.setState(PlayerState.READY);
                         boolean allOk = true;
                         for (Player p : players) {
-                            if (p.getState() != PlayerState.READY) {
+                            // オンラインの人がREADY状態でないとき
+                            if (p.getState() != PlayerState.READY && p.getOnlineState()) {
                                 allOk = false;
                                 break;
                             }
@@ -107,7 +127,7 @@ public class BJserver {
 
                                 boolean allBet = true;
                                 for (Player p : players) {
-                                    if (p.getState() != PlayerState.BET) {
+                                    if (p.getState() != PlayerState.BET && p.getOnlineState()) {
                                         allBet = false;
                                         break;
                                     }
@@ -172,6 +192,16 @@ public class BJserver {
                 }
             }
         }
+    }
+
+    // プレイヤーnameが使用済みか調べる
+    public static Player getPlayerByName(String name) {
+        for (Player p : players) {
+            if (p.getName().equals(name)) {
+                return p;
+            }
+        }
+        return null;
     }
 
     private static void dealCards() {

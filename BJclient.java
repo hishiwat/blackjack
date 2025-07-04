@@ -104,11 +104,21 @@ public class BJclient {
             out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
 
             // 名前を送信
-            out.println(playerName);
-
-            // プレイヤー情報を受信
-            playerID = Integer.parseInt(in.readLine());
-            chip = Integer.parseInt(in.readLine());
+            while (true) {
+                out.println(playerName);
+                String response = in.readLine();
+                if (response.equals("UsedName")) {
+                    JOptionPane.showMessageDialog(frame, "This name is already in use. Please enter a different name",
+                            "Name Conflict",
+                            JOptionPane.WARNING_MESSAGE);
+                    showNameDialog(); // 新しい名前を取得
+                } else {
+                    // 有効な名前で接続成功
+                    playerID = Integer.parseInt(response);
+                    chip = Integer.parseInt(in.readLine());
+                    break;
+                }
+            }
 
             addMessage("Connected successfully!");
             addMessage("Your ID: " + playerID);
