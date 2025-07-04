@@ -5,9 +5,10 @@ enum PlayerState {
     WAITING, // 初期状態
     READY, // 「OK」を送信した状態
     BET, // ベットを完了した状態
-    PLAYING,   // ヒット/スタンドを選択できる状態 
-    STAND,     // スタンドを選択した or バーストした状態
-    LOGOUT     // 継続しないことを選択した状態
+    PLAYING, // ヒット/スタンドを選択できる状態
+    STAND, // スタンドを選択した or バーストした状態
+    LOGOUT, // 継続しないことを選択した状態
+    SPECTATER,// 観戦状態
     // ここに他の状態を追加していく
 }
 
@@ -17,6 +18,7 @@ public class Player {
     private int chip;
     private int bet;
     private PlayerState state;
+    private boolean _isOnline;
     private PrintWriter out;
     private ArrayList<String> cardList = new ArrayList<>();
 
@@ -27,6 +29,7 @@ public class Player {
         this.bet = 0;
         this.state = PlayerState.WAITING;
         this.out = out;
+        this._isOnline = true;
     }
 
     public String getName() {
@@ -47,6 +50,18 @@ public class Player {
 
     public PlayerState getState() {
         return state;
+    }
+
+    public boolean getOnlineState() {
+        return _isOnline;
+    }
+
+    public void setOnline() {
+        _isOnline = true;
+    }
+
+    public void setOffline() {
+        _isOnline = false;
     }
 
     public void setState(PlayerState state) {
