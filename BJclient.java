@@ -151,8 +151,11 @@ public class BJclient {
                                 dealerCardList.add(dealerCard);
                                 SwingUtilities.invokeLater(() -> addMessage("Dealer's Card: " + dealerCard));
                             }
+
+                            // HITandSTAND処理
+                            hit_stand();
                         }
-                        
+
                         // 10. サーバーからの継続確認メッセージを受け取る
                         if (message.equals("CONTINUE?")) {
                             // ユーザーに継続するかどうかを尋ねるダイアログを表示
@@ -252,16 +255,22 @@ public class BJclient {
         frame.setVisible(true);
     }
 
-    //ユーザーにゲームを継続するか聞き、結果をサーバーに送信する
+    public void hit_stand() {
+        // <追加>
+        // カードをもう一枚引く場合はHIT，もう引かない場合はSTAND
+        out.println("STAND");
+    }
+
+    // ユーザーにゲームを継続するか聞き、結果をサーバーに送信する
     private void askToContinue() {
         SwingUtilities.invokeLater(() -> {
             int choice = JOptionPane.showConfirmDialog(
-                frame,
-                "もう一度プレイしますか？",
-                "ゲームを続けますか？",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.QUESTION_MESSAGE);
-            
+                    frame,
+                    "もう一度プレイしますか？",
+                    "ゲームを続けますか？",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+
             if (choice == JOptionPane.YES_OPTION) {
                 // 「はい」が選択されたら、サーバーに"CONTINUE_YES"を送信
                 out.println("CONTINUE_YES");
@@ -278,6 +287,7 @@ public class BJclient {
             }
         });
     }
+
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new BJclient().show();
