@@ -6,8 +6,7 @@ public class BJserver {
     public static final int PORT = 8080;
     private static int idCounter = 0;
     private static boolean gameInProgress = false; // ゲーム進行中フラグ
-    private static String cardlist[] = new String[] { "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q",
-            "K" };
+    private static Card cardlist = new Card();
     private static ArrayList<String> dealerCardList = new ArrayList<>();
 
     // プレイヤーリスト（スレッドセーフ）
@@ -116,6 +115,7 @@ public class BJserver {
 
                                 synchronized (BJserver.class) {
                                     if (allBet && gameInProgress) {
+                                        // カード配布
                                         dealCards();
                                     } else {
                                         out.println("Waiting for all players to bet...");
@@ -129,6 +129,22 @@ public class BJserver {
                         } catch (NumberFormatException e) {
                             out.println("Invalid bet format. Use: BET <amount>");
                         }
+                    }
+
+                    if (line.equals("HIT")) {
+                        // カードをもう一枚引く処理
+                        // <追加>
+                    }
+
+                    if (line.equals("STAND")) {
+                        // 全員がSTAND状態になったら次に進む
+                        // <追加>
+
+                        // ディーラのカード処理
+                        // <追加>
+
+                        // 勝敗判定に移行
+                        judgeAndDistribute();
                     }
 
                     if (line.equals("CONTINUE_YES")) {
@@ -159,13 +175,14 @@ public class BJserver {
     }
 
     private static void dealCards() {
-        String card = cardlist[10];
+        cardlist.shuffle();
+        String card = cardlist.getCard();
         dealerCardList.add(card);
 
         for (Player p : players) {
             p.sendMessage("Cards");
             for (int i = 0; i < 2; i++) {
-                card = cardlist[i];
+                card = cardlist.getCard();
                 p.setCard(card);
                 p.sendMessage(card);
 
@@ -193,7 +210,8 @@ public class BJserver {
             } else if (dealerBust || playerScore > dealerScore) {
                 // プレイヤーの勝利
                 // ブラックジャック(2枚で21)の場合は2.5倍、それ以外は2倍
-                int winnings = (playerScore == 21 && p.getCards().size() == 2) ? (int)(p.getBet() * 2.5) : (p.getBet() * 2);
+                int winnings = (playerScore == 21 && p.getCards().size() == 2) ? (int) (p.getBet() * 2.5)
+                        : (p.getBet() * 2);
                 p.winChips(winnings);
                 resultMessage = "You Win! You get " + winnings + " chips.";
             } else if (playerScore == dealerScore) {
@@ -208,19 +226,17 @@ public class BJserver {
             p.sendMessage("Your total chips: " + p.getChip());
         }
 
-        //プレイヤーの継続意思を聞く
+        // プレイヤーの継続意思を聞く
         askForContinuation();
     }
 
-    
-    //全てのプレイヤーに継続意思を確認するメッセージを送信
+    // 全てのプレイヤーに継続意思を確認するメッセージを送信
     private static void askForContinuation() {
         gameInProgress = false; // ゲーム自体は一旦終了
         broadcast("CONTINUE?");
     }
-    
-    
-    //継続しないプレイヤーをリストから削除し、次のラウンドの準備を確認する
+
+    // 継続しないプレイヤーをリストから削除し、次のラウンドの準備を確認する
     private static synchronized void checkAllPlayersReadyForNextRound() {
         // LOGOUT状態のプレイヤーがいればリストから削除
         players.removeIf(p -> p.getState() == PlayerState.LOGOUT);
@@ -246,6 +262,7 @@ public class BJserver {
 
     /**
      * 補助メソッド：手札の点数を計算する
+     * 
      * @param cards 手札のリスト
      * @return 点数
      */
@@ -253,13 +270,14 @@ public class BJserver {
         int score = 0;
         int aceCount = 0;
         for (String card : cards) {
-            if (card.equals("A")) {
+            String cardNum = card.substring(1);// 数字部分を抜き出し H2 -> 2
+            if (cardNum.equals("A")) {
                 aceCount++;
                 score += 11;
-            } else if ("JQK10".contains(card)) {
+            } else if ("JQK10".contains(cardNum)) {
                 score += 10;
             } else {
-                score += Integer.parseInt(card);
+                score += Integer.parseInt(cardNum);
             }
         }
         while (score > 21 && aceCount > 0) {
@@ -268,9 +286,10 @@ public class BJserver {
         }
         return score;
     }
-    
+
     /**
      * 補助メソッド：全プレイヤーにメッセージを送信する
+     * 
      * @param message 送信するメッセージ
      */
     private static void broadcast(String message) {
