@@ -43,4 +43,6 @@ public class Card {
     public void initialize() {
         count = 0;
     }
+
 }
+
