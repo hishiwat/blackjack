@@ -191,6 +191,7 @@ public class BJclient {
     }
 
     private void game() {
+        chip = player.getChip();
         while (true) {
             String input = JOptionPane.showInputDialog(frame,
                     "Enter chips to bet (you have " + chip + "):",
