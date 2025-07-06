@@ -51,11 +51,14 @@ public class BJserver {
                     player = getPlayerByName(name);
                     if (player != null) {
                         if (!player.getOnlineState()) {
+                            // 再ログイン
+                            // プレイヤー情報を初期化(チップ数は引継)
                             player.setOnline();
                             player.resetForNewRound();
                             player.setOut(out);
                             break;
                         } else {
+                            // 同じ名前の人がオンライン状態
                             out.println("UsedName");
                         }
 
@@ -72,6 +75,12 @@ public class BJserver {
                 }
 
                 System.out.println("User ID: " + player.getID() + " Name: " + player.getName());
+                if (gameInProgress) {
+                    out.println("Inprogress");
+                    player.setState(PlayerState.SPECTATOR);
+                } else {
+                    out.println("Connected");
+                }
                 out.println(player.getID());
                 out.println(player.getChip());
 
@@ -102,21 +111,10 @@ public class BJserver {
                         player.setState(PlayerState.READY);
 
                         synchronized (BJserver.class) {
-                            boolean allOk = true;
-                            for (Player p : players) {
-                                if (p.getState() != PlayerState.READY && p.getOnlineState()) {
-                                    allOk = false;
-                                    break;
-                                }
-                            }
-
-                            if (allOk && !gameInProgress) {
+                            if (allActivePlayersAreInState(PlayerState.READY) && !gameInProgress) {
                                 gameInProgress = true;
                                 System.out.println("=== GAME START ===");
-
-                                for (Player p : players) {
-                                    p.sendMessage("Game Start");
-                                }
+                                broadcast("Game Start");
                             } else {
                                 out.println("Waiting for all players to be ready...");
                             }
@@ -125,34 +123,22 @@ public class BJserver {
 
                     if (line.startsWith("BET ")) {
                         try {
-                            // BET <amount>で送信される。amountをintに変換
                             int betAmount = Integer.parseInt(line.substring(4).trim());
                             if (betAmount > 0 && betAmount <= player.getChip()) {
                                 player.chipBet(betAmount);
                                 player.setState(PlayerState.BET);
                                 out.println("Bet accepted: " + betAmount);
 
-                                boolean allBet = true;
-                                for (Player p : players) {
-                                    if (p.getState() != PlayerState.BET && p.getOnlineState()) {
-                                        allBet = false;
-                                        break;
-                                    }
-                                }
-
                                 synchronized (BJserver.class) {
-                                    if (allBet && gameInProgress) {
-                                        // カード配布
+                                    if (allActivePlayersAreInState(PlayerState.BET) && gameInProgress) {
                                         dealCards();
                                     } else {
                                         out.println("Waiting for all players to bet...");
                                     }
                                 }
-
                             } else {
                                 out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
                             }
-
                         } catch (NumberFormatException e) {
                             out.println("Invalid bet format. Use: BET <amount>");
                         }
@@ -211,13 +197,17 @@ public class BJserver {
         return null;
     }
 
+    // カード配布
+    // 各プレイヤーに2枚ずつ，ディーラは1枚
     private static void dealCards() {
         cardlist.shuffle();
+
         dealerCardList.clear();
         String card = cardlist.getCard();
         dealerCardList.add(card);
 
-        for (Player p : players) {
+        List<Player> activePlayers = getActivePlayers();
+        for (Player p : activePlayers) {
             p.sendMessage("Cards");
             for (int i = 0; i < 2; i++) {
                 card = cardlist.getCard();
@@ -227,6 +217,33 @@ public class BJserver {
             }
             p.sendMessage("Dealer Card " + dealerCardList.get(0));
         }
+    }
+
+    // オンラインでかつ観戦モードではないプレイヤーリスト
+    private static List<Player> getActivePlayers() {
+        List<Player> activePlayers = new ArrayList<>();
+        synchronized (players) {
+            for (Player p : players) {
+                if (p.getOnlineState() && p.getState() != PlayerState.SPECTATOR) {
+                    activePlayers.add(p);
+                }
+            }
+        }
+        return activePlayers;
+    }
+
+    // activeなプレイヤーの状態がそろっているか確認
+    private static boolean allActivePlayersAreInState(PlayerState state) {
+        List<Player> activePlayers = getActivePlayers();
+        if (activePlayers.isEmpty())
+            return false;
+
+        for (Player p : activePlayers) {
+            if (p.getState() != state) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static void judgeAndDistribute() {
