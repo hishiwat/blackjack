@@ -114,17 +114,22 @@ public class BJclient {
                     showNameDialog(); // 新しい名前を取得
                 } else {
                     // 有効な名前で接続成功
-                    playerID = Integer.parseInt(response);
+                    playerID = Integer.parseInt(in.readLine());
                     chip = Integer.parseInt(in.readLine());
+                    player = new Player(playerName, playerID, chip, out);
+                    addMessage("Connected successfully!");
+                    // ゲーム途中の参加の場合は観戦モード
+                    if (response.equals("Inprogress")) {
+                        addMessage("You are in spectator mode");
+                        player.setState(PlayerState.SPECTATOR);
+                    }
+
                     break;
                 }
             }
 
-            addMessage("Connected successfully!");
             addMessage("Your ID: " + playerID);
             addMessage("Your chip: " + chip);
-
-            player = new Player(playerName, playerID, chip, out);
 
             isConnected = true;
             readyButton.setEnabled(true);
