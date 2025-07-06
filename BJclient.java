@@ -191,38 +191,37 @@ public class BJclient {
     }
 
     private void game() {
+        while (true) {
+            String input = JOptionPane.showInputDialog(frame,
+                    "Enter chips to bet (you have " + chip + "):",
+                    "Bet",
+                    JOptionPane.PLAIN_MESSAGE);
 
-        SwingUtilities.invokeLater(() -> {
-            while (true) {
-                String input = JOptionPane.showInputDialog(frame, "Enter chips to bet (you have " + chip + "):", "Bet",
-                        JOptionPane.PLAIN_MESSAGE);
-
-                if (input == null) {
-                    addMessage("Bet canceled.");
-                    return; // キャンセルされたら抜ける
-                }
-
-                try {
-                    int bet = Integer.parseInt(input.trim());
-
-                    if (bet <= 0) {
-                        JOptionPane.showMessageDialog(frame, "Bet must be more than 0.", "Invalid Bet",
-                                JOptionPane.WARNING_MESSAGE);
-                    } else if (bet > chip) {
-                        JOptionPane.showMessageDialog(frame, "You cannot bet more than your chips (" + chip + ").",
-                                "Invalid Bet", JOptionPane.WARNING_MESSAGE);
-                    } else {
-                        out.println("BET " + bet);
-                        addMessage("You bet: " + bet);
-                        break;
-                    }
-                } catch (NumberFormatException ex) {
-                    JOptionPane.showMessageDialog(frame, "Please enter a valid number.", "Invalid Input",
-                            JOptionPane.WARNING_MESSAGE);
-                }
+            if (input == null) {
+                addMessage("Bet canceled.");
+                return;
             }
-        });
 
+            try {
+                int bet = Integer.parseInt(input.trim());
+
+                if (bet <= 0) {
+                    JOptionPane.showMessageDialog(frame, "Bet must be more than 0.", "Invalid Bet",
+                            JOptionPane.WARNING_MESSAGE);
+                } else if (bet > chip) {
+                    JOptionPane.showMessageDialog(frame, "You cannot bet more than your chips (" + chip + ").",
+                            "Invalid Bet", JOptionPane.WARNING_MESSAGE);
+                } else {
+                    out.println("BET " + bet);
+                    addMessage("You bet: " + bet);
+                    player.chipBet(bet);
+                    break;
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(frame, "Please enter a valid number.", "Invalid Input",
+                        JOptionPane.WARNING_MESSAGE);
+            }
+        }
     }
 
     private void sendReady() {
