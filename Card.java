@@ -21,7 +21,8 @@ public class Card {
 
     public String getCard() {
         if (count >= 52) {
-            return null; // もうカードがない
+            count = 0; // カードがない場合リセット
+            return getCard();
         }
         int i = index[count]; // 番号の取り出し
         count++;
@@ -36,6 +37,10 @@ public class Card {
             index[i] = index[j];
             index[j] = temp;
         }
+        count = 0;
+    }
+
+    public void initialize() {
         count = 0;
     }
 }

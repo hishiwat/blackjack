@@ -94,4 +94,8 @@ public class Player {
         this.bet = 0;
         this.state = PlayerState.WAITING;
     }
+
+    public void setOut(PrintWriter out) {
+        this.out = out;
+    }
 }

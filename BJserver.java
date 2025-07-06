@@ -50,9 +50,14 @@ public class BJserver {
                         return;
                     player = getPlayerByName(name);
                     if (player != null) {
-                        if (!player.getOnlineState())
+                        if (!player.getOnlineState()) {
+                            player.setOnline();
+                            player.resetForNewRound();
+                            player.setOut(out);
                             break;
-                        out.println("UsedName");
+                        } else {
+                            out.println("UsedName");
+                        }
 
                     } else {
                         synchronized (BJserver.class) {
@@ -65,7 +70,7 @@ public class BJserver {
                         break;
                     }
                 }
-                player.setOnline();
+
                 System.out.println("User ID: " + player.getID() + " Name: " + player.getName());
                 out.println(player.getID());
                 out.println(player.getChip());
@@ -75,7 +80,7 @@ public class BJserver {
                     String line = in.readLine();
                     if (line == null || line.equals("END")) {
                         player.setOffline();
-                        System.out.println(player.getOnlineState());
+                        // System.out.println(player.getOnlineState());
                         break;
                     }
 
@@ -95,24 +100,26 @@ public class BJserver {
                     // ゲーム開始の応答表示
                     if (line.equals("OK")) {
                         player.setState(PlayerState.READY);
-                        boolean allOk = true;
-                        for (Player p : players) {
-                            // オンラインの人がREADY状態でないとき
-                            if (p.getState() != PlayerState.READY && p.getOnlineState()) {
-                                allOk = false;
-                                break;
-                            }
-                        }
-                        if (allOk && !gameInProgress) {
-                            // ゲーム開始状態に移行
-                            gameInProgress = true;
-                            System.out.println("=== GAME START ===");
+
+                        synchronized (BJserver.class) {
+                            boolean allOk = true;
                             for (Player p : players) {
-                                p.sendMessage("Game Start");
+                                if (p.getState() != PlayerState.READY && p.getOnlineState()) {
+                                    allOk = false;
+                                    break;
+                                }
                             }
 
-                        } else {
-                            out.println("Waiting for all players to be ready...");
+                            if (allOk && !gameInProgress) {
+                                gameInProgress = true;
+                                System.out.println("=== GAME START ===");
+
+                                for (Player p : players) {
+                                    p.sendMessage("Game Start");
+                                }
+                            } else {
+                                out.println("Waiting for all players to be ready...");
+                            }
                         }
                     }
 
@@ -206,6 +213,7 @@ public class BJserver {
 
     private static void dealCards() {
         cardlist.shuffle();
+        dealerCardList.clear();
         String card = cardlist.getCard();
         dealerCardList.add(card);
 
@@ -279,7 +287,7 @@ public class BJserver {
 
         // 残ったプレイヤー全員が次のラウンドの準備ができているか確認
         for (Player p : players) {
-            if (p.getState() != PlayerState.READY) {
+            if (p.getState() != PlayerState.READY && p.getOnlineState()) {
                 return; // まだ意思表示していないプレイヤーがいる
             }
         }
