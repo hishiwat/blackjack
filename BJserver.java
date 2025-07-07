@@ -89,6 +89,9 @@ public class BJserver {
                     String line = in.readLine();
                     if (line == null || line.equals("END")) {
                         player.setOffline();
+                        player.setState(PlayerState.LOGOUT);
+                        checkStartCondition(); // Ready状態の確認
+                        checkAllPlayersBet();// BET状態の確認
                         // System.out.println(player.getOnlineState());
                         break;
                     }
@@ -109,33 +112,26 @@ public class BJserver {
                     // ゲーム開始の応答表示
                     if (line.equals("OK")) {
                         player.setState(PlayerState.READY);
-
-                        synchronized (BJserver.class) {
-                            if (allActivePlayersAreInState(PlayerState.READY) && !gameInProgress) {
-                                gameInProgress = true;
-                                System.out.println("=== GAME START ===");
-                                broadcast("Game Start");
-                            } else {
-                                out.println("Waiting for all players to be ready...");
-                            }
-                        }
+                        if (!checkStartCondition())
+                            out.println("Waiting for all players to be ready...");
                     }
 
                     if (line.startsWith("BET ")) {
                         try {
+                            if (line.equals("BET canceled")) {
+                                player.setState(PlayerState.SPECTATOR);
+                                checkAllPlayersBet();
+                            }
+
                             int betAmount = Integer.parseInt(line.substring(4).trim());
                             if (betAmount > 0 && betAmount <= player.getChip()) {
                                 player.chipBet(betAmount);
                                 player.setState(PlayerState.BET);
                                 out.println("Bet accepted: " + betAmount);
 
-                                synchronized (BJserver.class) {
-                                    if (allActivePlayersAreInState(PlayerState.BET) && gameInProgress) {
-                                        dealCards();
-                                    } else {
-                                        out.println("Waiting for all players to bet...");
-                                    }
-                                }
+                                if (!checkAllPlayersBet())
+                                    out.println("Waiting for all players to bet...");
+
                             } else {
                                 out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
                             }
@@ -162,7 +158,7 @@ public class BJserver {
 
                     if (line.equals("CONTINUE_YES")) {
                         player.resetForNewRound();
-                        player.setState(PlayerState.READY);
+                        player.setState(PlayerState.WAITING);
                         checkAllPlayersReadyForNextRound();
                     }
 
@@ -197,6 +193,53 @@ public class BJserver {
         return null;
     }
 
+    // オンラインでかつ観戦モード・ログアウトでないプレイヤーのみ
+    private static List<Player> getActivePlayers() {
+        List<Player> activePlayers = new ArrayList<>();
+        synchronized (players) {
+            for (Player p : players) {
+                if (p.getOnlineState() &&
+                        p.getState() != PlayerState.SPECTATOR &&
+                        p.getState() != PlayerState.LOGOUT) {
+                    activePlayers.add(p);
+                }
+            }
+        }
+        return activePlayers;
+    }
+
+    // activeなプレイヤーの状態がそろっているか確認
+    private static boolean allActivePlayersAreInState(PlayerState state) {
+        List<Player> activePlayers = getActivePlayers();
+        if (activePlayers.isEmpty())
+            return false;
+
+        for (Player p : activePlayers) {
+            if (p.getState() != state) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static synchronized boolean checkStartCondition() {
+        if (!gameInProgress && allActivePlayersAreInState(PlayerState.READY)) {
+            gameInProgress = true;
+            System.out.println("=== GAME START ===");
+            broadcast("Game Start");
+            return true;
+        }
+        return false;
+    }
+
+    private static synchronized boolean checkAllPlayersBet() {
+        if (gameInProgress && allActivePlayersAreInState(PlayerState.BET)) {
+            dealCards();
+            return true;
+        }
+        return false;
+    }
+
     // カード配布
     // 各プレイヤーに2枚ずつ，ディーラは1枚
     private static void dealCards() {
@@ -217,33 +260,6 @@ public class BJserver {
             }
             p.sendMessage("Dealer Card " + dealerCardList.get(0));
         }
-    }
-
-    // オンラインでかつ観戦モードではないプレイヤーリスト
-    private static List<Player> getActivePlayers() {
-        List<Player> activePlayers = new ArrayList<>();
-        synchronized (players) {
-            for (Player p : players) {
-                if (p.getOnlineState() && p.getState() != PlayerState.SPECTATOR) {
-                    activePlayers.add(p);
-                }
-            }
-        }
-        return activePlayers;
-    }
-
-    // activeなプレイヤーの状態がそろっているか確認
-    private static boolean allActivePlayersAreInState(PlayerState state) {
-        List<Player> activePlayers = getActivePlayers();
-        if (activePlayers.isEmpty())
-            return false;
-
-        for (Player p : activePlayers) {
-            if (p.getState() != state) {
-                return false;
-            }
-        }
-        return true;
     }
 
     private static void judgeAndDistribute() {
@@ -304,7 +320,7 @@ public class BJserver {
 
         // 残ったプレイヤー全員が次のラウンドの準備ができているか確認
         for (Player p : players) {
-            if (p.getState() != PlayerState.READY && p.getOnlineState()) {
+            if (p.getState() != PlayerState.WAITING && p.getOnlineState()) {
                 return; // まだ意思表示していないプレイヤーがいる
             }
         }
