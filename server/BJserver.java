@@ -1,6 +1,8 @@
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.security.*;
+import java.util.Base64.*;
 
 public class BJserver {
     public static final int PORT = 8080;
@@ -14,7 +16,7 @@ public class BJserver {
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(PORT);
-        System.out.println("Server started on port " + PORT);
+        System.out.println("Blackjack WebSocket server started on port " + PORT);
 
         try {
             while (true) {
@@ -30,6 +32,8 @@ public class BJserver {
     // クライアント処理スレッド
     private static class ClientHandler implements Runnable {
         private Socket socket;
+        private Transmit transmit;
+        private Player player; // プレイヤー参照を保持
 
         public ClientHandler(Socket socket) {
             this.socket = socket;
@@ -37,43 +41,48 @@ public class BJserver {
 
         public void run() {
             try (
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    PrintWriter out = new PrintWriter(
-                            new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true)) {
+                InputStream is = socket.getInputStream();
+                BufferedReader in = new BufferedReader(new InputStreamReader(is));
+                OutputStream os = socket.getOutputStream();
+            ) {
+                transmit = new Transmit(in, os, is);
+                
                 String name;
                 int playerId;
-                Player player;
-                while (true) {
-                    name = in.readLine();
-
-                    if (name == null || name.equals("END"))
+                
+                // プレイヤー名の受信
+                name = transmit.readMessage();
+                if (name == null) return;
+                
+                this.player = getPlayerByName(name);
+                if (this.player != null) {
+                    if (this.player.getOnlineState()) {
+                        // 既にオンラインの場合は名前が使用中
+                        transmit.sendMessage("UsedName");
                         return;
-                    player = getPlayerByName(name);
-                    if (player != null) {
-                        if (!player.getOnlineState())
-                            break;
-                        out.println("UsedName");
-
                     } else {
-                        synchronized (BJserver.class) {
-                            playerId = ++idCounter;
-                        }
-
-                        player = new Player(name, playerId, 500, out);
-                        players.add(player); // リストに追加
-
-                        break;
+                        // オフラインの場合は既存プレイヤーを再利用
+                        this.player.setTransmit(transmit);
                     }
+                } else {
+                    // 新しいプレイヤーを作成
+                    synchronized (BJserver.class) {
+                        playerId = ++idCounter;
+                    }
+                    this.player = new Player(name, playerId, 500, transmit);
+                    players.add(this.player);
                 }
-                player.setOnline();
-                System.out.println("User ID: " + player.getID() + " Name: " + player.getName());
-                out.println(player.getID());
-                out.println(player.getChip());
+                
+                this.player.setOnline();
+                System.out.println("User ID: " + this.player.getID() + " Name: " + this.player.getName());
+                transmit.sendMessage("ID:" + this.player.getID());
+                transmit.sendMessage("CHIP:" + this.player.getChip());
 
-                // クライアントが END を送るまで待機
-                while (true) {
-                    String line = in.readLine();
-                    if (line == null || line.equals("END")) {
+                // メッセージループ
+                String line;
+                while ((line = transmit.readMessage()) != null) {
+					System.out.println(line);
+                    if (line.equals("END")) {
                         player.setOffline();
                         System.out.println(player.getOnlineState());
                         break;
@@ -81,15 +90,14 @@ public class BJserver {
 
                     // プレイヤー一覧を表示したい場合
                     if (line.equals("LIST")) {
-                        out.println("=== Player List ===");
+						String message = "LIST,";
                         synchronized (players) {
                             for (Player p : players) {
                                 if (p.getOnlineState())
-                                    out.println(
-                                            "ID: " + p.getID() + ", Name: " + p.getName() + ", chip: " + p.getChip());
+                                    message += "ID: " + p.getID() + ", Name: " + p.getName() + ", chip: " + p.getChip() + ",";
                             }
                         }
-                        out.println("=== End of List ===");
+						transmit.sendMessage(message);
                     }
 
                     // ゲーム開始の応答表示
@@ -112,7 +120,7 @@ public class BJserver {
                             }
 
                         } else {
-                            out.println("Waiting for all players to be ready...");
+                            transmit.sendMessage("Waiting for all players to be ready...");
                         }
                     }
 
@@ -120,10 +128,10 @@ public class BJserver {
                         try {
                             // BET <amount>で送信される。amountをintに変換
                             int betAmount = Integer.parseInt(line.substring(4).trim());
-                            if (betAmount > 0 && betAmount <= player.getChip()) {
-                                player.chipBet(betAmount);
-                                player.setState(PlayerState.BET);
-                                out.println("Bet accepted: " + betAmount);
+                            if (betAmount > 0 && betAmount <= this.player.getChip()) {
+                                this.player.chipBet(betAmount);
+                                this.player.setState(PlayerState.BET);
+                                transmit.sendMessage("Bet accepted: " + betAmount);
 
                                 boolean allBet = true;
                                 for (Player p : players) {
@@ -137,17 +145,18 @@ public class BJserver {
                                     if (allBet && gameInProgress) {
                                         // カード配布
                                         dealCards();
+										System.out.println("Cards dealt");
                                     } else {
-                                        out.println("Waiting for all players to bet...");
+                                        transmit.sendMessage("Waiting for all players to bet...");
                                     }
                                 }
 
                             } else {
-                                out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
+                                transmit.sendMessage("Invalid bet amount. You have " + this.player.getChip() + " chips.");
                             }
 
                         } catch (NumberFormatException e) {
-                            out.println("Invalid bet format. Use: BET <amount>");
+                            transmit.sendMessage("Invalid bet format. Use: BET <amount>");
                         }
                     }
 
@@ -168,13 +177,13 @@ public class BJserver {
                     }
 
                     if (line.equals("CONTINUE_YES")) {
-                        player.resetForNewRound();
-                        player.setState(PlayerState.READY);
+                        this.player.resetForNewRound();
+                        this.player.setState(PlayerState.READY);
                         checkAllPlayersReadyForNextRound();
                     }
 
                     if (line.equals("CONTINUE_NO")) {
-                        player.setState(PlayerState.LOGOUT);
+                        this.player.setState(PlayerState.LOGOUT);
                         // 他のプレイヤーを待たずに次のステップへ進む
                         checkAllPlayersReadyForNextRound();
                         break; // このプレイヤーのループを抜けて接続を終了する
@@ -184,6 +193,11 @@ public class BJserver {
             } catch (IOException e) {
                 System.err.println("Connection error: " + e);
             } finally {
+                // プレイヤーをオフライン状態にする
+                if (this.player != null) {
+                    this.player.setOffline();
+                    System.out.println("Player " + this.player.getName() + " went offline");
+                }
                 try {
                     socket.close();
                     System.out.println("Connection closed: " + socket);
@@ -191,6 +205,107 @@ public class BJserver {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+    // WebSocket通信クラス
+    static class Transmit {
+        BufferedReader in;
+        OutputStream os;
+        InputStream is;
+
+        Transmit(BufferedReader in, OutputStream os, InputStream is) throws IOException {
+            this.in = in;
+            this.os = os;
+            this.is = is;
+            handShake();
+        }
+
+        private void handShake() throws IOException {
+            try {
+                String key = null;
+                String line;
+                while ((line = in.readLine()) != null) {
+                    if (line.startsWith("Sec-WebSocket-Key: ")) {
+                        key = line.substring(19).trim();
+                    }
+                    if (line.isEmpty()) {
+                        break;
+                    }
+                }
+                if (key == null) {
+                    throw new IOException("Sec-WebSocket-Key not found.");
+                }
+                
+                String acceptKey = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+                MessageDigest md = MessageDigest.getInstance("SHA-1");
+                byte[] sha1 = md.digest(acceptKey.getBytes("UTF-8"));
+                String acceptKeyBase64 = Base64.getEncoder().encodeToString(sha1);
+
+                String response = 
+                        "HTTP/1.1 101 Switching Protocols\r\n" +
+                        "Upgrade: websocket\r\n" +
+                        "Connection: Upgrade\r\n" +
+                        "Sec-WebSocket-Accept: " + acceptKeyBase64 + "\r\n\r\n";
+                os.write(response.getBytes("UTF-8"));
+                os.flush();
+            } catch (Exception e) {
+                System.err.println("Handshake error: " + e);
+            }
+        }
+
+        String readMessage() throws IOException {
+            int b1 = is.read();
+            int b2 = is.read();
+            if (b1 != 0x81) {
+                return null;
+            }
+
+            boolean masked = (b2 & 0x80) != 0;
+            int payloadLength = b2 & 0x7F;
+            if (payloadLength == 126) {
+                int b3 = is.read();
+                int b4 = is.read();
+                payloadLength = (b3 << 8) | b4;
+            } else if (payloadLength == 127) {
+                throw new IOException("Payload length too long.");
+            }
+
+            byte[] mask = null;
+            if (masked) {
+                mask = new byte[4];
+                is.read(mask, 0, 4);
+            }
+
+            byte[] payload = new byte[payloadLength];
+            is.read(payload, 0, payloadLength);
+
+            if (masked) {
+                for (int i = 0; i < payloadLength; i++) {
+                    payload[i] ^= mask[i % 4];
+                }
+            }
+
+            return new String(payload, "UTF-8");
+        }
+
+        void sendMessage(String message) throws IOException {
+            byte[] payload = message.getBytes("UTF-8");
+            int payloadLength = payload.length;
+			System.out.println("sendMessage: " + message);
+
+            os.write(0x81);
+            if (payloadLength <= 125) {
+                os.write(payloadLength);
+            } else if (payloadLength <= 65535) {
+                os.write(0x7E);
+                os.write(new byte[] {(byte) (payloadLength >> 8), (byte) (payloadLength & 0xFF)});
+            } else {
+                throw new IOException("Payload too long.");
+            }
+            
+            os.write(payload);
+            os.flush();
         }
     }
 
@@ -210,14 +325,15 @@ public class BJserver {
         dealerCardList.add(card);
 
         for (Player p : players) {
-            p.sendMessage("Cards");
+			String message = "Cards,";
             for (int i = 0; i < 2; i++) {
                 card = cardlist.getCard();
                 p.setCard(card);
-                p.sendMessage(card);
+                message += card + ",";
 
             }
-            p.sendMessage("Dealer Card " + dealerCardList.get(0));
+			p.sendMessage(message);
+            p.sendMessage("Dealer Card," + dealerCardList.get(0));
         }
     }
 

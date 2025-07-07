@@ -19,16 +19,16 @@ public class Player {
     private int bet;
     private PlayerState state;
     private boolean _isOnline;
-    private PrintWriter out;
+    private BJserver.Transmit transmit;
     private ArrayList<String> cardList = new ArrayList<>();
 
-    public Player(String name, int id, int chip, PrintWriter out) {
+    public Player(String name, int id, int chip, BJserver.Transmit transmit) {
         this.name = name;
         this.id = id;
         this.chip = chip;
         this.bet = 0;
         this.state = PlayerState.WAITING;
-        this.out = out;
+        this.transmit = transmit;
         this._isOnline = true;
     }
 
@@ -64,6 +64,10 @@ public class Player {
         _isOnline = false;
     }
 
+    public void setTransmit(BJserver.Transmit transmit) {
+        this.transmit = transmit;
+    }
+
     public void setState(PlayerState state) {
         this.state = state;
     }
@@ -82,7 +86,11 @@ public class Player {
     }
 
     public void sendMessage(String message) {
-        out.println(message);
+        try {
+            transmit.sendMessage(message);
+        } catch (Exception e) {
+            System.err.println("Error sending message to " + name + ": " + e.getMessage());
+        }
     }
 
     public void winChips(int amount) {
