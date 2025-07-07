@@ -143,9 +143,9 @@ public class BJclient {
                         final String message = line;
                         System.out.println("[DEBUG] Received: " + message); // デバッグ用 受信したメッセージを標準出力に表示
                         SwingUtilities.invokeLater(() -> addMessage(message));
+
                         if (message.equals("Game Start")) {
                             game();
-
                         }
 
                         if (message.equals("Cards")) {
@@ -171,14 +171,14 @@ public class BJclient {
                             hit_stand();
                         }
 
+                        // ここに追加
+                        // if (message.equals("文字列")){操作()}
+
                         // 10. サーバーからの継続確認メッセージを受け取る
                         if (message.equals("CONTINUE?")) {
                             // ユーザーに継続するかどうかを尋ねるダイアログを表示
                             askToContinue();
                         }
-
-                        // ここに追加すればよさそう?
-                        // if (message.equals("文字列")){操作()}
 
                     }
                 } catch (IOException e) {
@@ -204,7 +204,9 @@ public class BJclient {
                     JOptionPane.PLAIN_MESSAGE);
 
             if (input == null) {
-                addMessage("Bet canceled.");
+                // ベットしなかった場合は観戦モードに移行
+                addMessage("Bet canceled.\nSwitch to spectator mode");
+                out.println("BET canceled");
                 return;
             }
 
