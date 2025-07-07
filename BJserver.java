@@ -90,9 +90,15 @@ public class BJserver {
                     if (line == null || line.equals("END")) {
                         player.setOffline();
                         player.setState(PlayerState.LOGOUT);
+                        List<Player> activePlayers = getActivePlayers();
+                        if (activePlayers.size() == 0) {
+                            gameInProgress = false;// ゲームのリセット
+                            System.out.println("All players left. Waiting for new connections.");
+                            break;
+                        }
+
                         checkStartCondition(); // Ready状態の確認
                         checkAllPlayersBet();// BET状態の確認
-                        // System.out.println(player.getOnlineState());
                         break;
                     }
 
@@ -121,20 +127,22 @@ public class BJserver {
                             if (line.equals("BET canceled")) {
                                 player.setState(PlayerState.SPECTATOR);
                                 checkAllPlayersBet();
-                            }
-
-                            int betAmount = Integer.parseInt(line.substring(4).trim());
-                            if (betAmount > 0 && betAmount <= player.getChip()) {
-                                player.chipBet(betAmount);
-                                player.setState(PlayerState.BET);
-                                out.println("Bet accepted: " + betAmount);
-
-                                if (!checkAllPlayersBet())
-                                    out.println("Waiting for all players to bet...");
 
                             } else {
-                                out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
+                                int betAmount = Integer.parseInt(line.substring(4).trim());
+                                if (betAmount > 0 && betAmount <= player.getChip()) {
+                                    player.chipBet(betAmount);
+                                    player.setState(PlayerState.BET);
+                                    out.println("Bet accepted: " + betAmount);
+
+                                    if (!checkAllPlayersBet())
+                                        out.println("Waiting for all players to bet...");
+
+                                } else {
+                                    out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
+                                }
                             }
+
                         } catch (NumberFormatException e) {
                             out.println("Invalid bet format. Use: BET <amount>");
                         }
