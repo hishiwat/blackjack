@@ -147,6 +147,10 @@ public class BJclient {
                         if (message.equals("Game Start")) {
                             game();
                         }
+                        if (message.equals("Game Reset")) {
+                            player.resetForNewRound();
+                            readyButton.setEnabled(true);
+                        }
 
                         if (message.equals("Cards")) {
                             // 2枚のカードを受け取りリストに格納
@@ -162,6 +166,7 @@ public class BJclient {
 
                             line = in.readLine();
                             if (line != null && line.startsWith("Dealer Card ")) {
+                                dealerCardList.clear();
                                 String dealerCard = line.substring("Dealer Card ".length()).trim();
                                 dealerCardList.add(dealerCard);
                                 SwingUtilities.invokeLater(() -> addMessage("Dealer's Card: " + dealerCard));
