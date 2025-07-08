@@ -127,6 +127,18 @@ public class BJserver {
                             if (line.equals("BET canceled")) {
                                 player.setState(PlayerState.SPECTATOR);
                                 checkAllPlayersBet();
+                                List<Player> activePlayers = getActivePlayers();
+                                if (activePlayers.size() == 0) {
+                                    gameInProgress = false;// ゲームのリセット
+                                    System.out.println("All players have cancelled bets. Quit the game.");
+                                    synchronized (players) {
+                                        for (Player p : getOnlinePlayers()) {
+                                            p.setState(PlayerState.WAITING);
+                                            p.sendMessage("Game Reset");
+                                        }
+                                    }
+                                    continue;
+                                }
 
                             } else {
                                 int betAmount = Integer.parseInt(line.substring(4).trim());
@@ -214,6 +226,17 @@ public class BJserver {
             }
         }
         return activePlayers;
+    }
+
+    private static List<Player> getOnlinePlayers() {
+        List<Player> onlinePlayers = new ArrayList<>();
+        synchronized (players) {
+            for (Player p : players) {
+                if (p.getOnlineState())
+                    onlinePlayers.add(p);
+            }
+        }
+        return onlinePlayers;
     }
 
     // activeなプレイヤーの状態がそろっているか確認
