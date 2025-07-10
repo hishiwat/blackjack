@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class BJserver {
@@ -37,9 +38,9 @@ public class BJserver {
 
         public void run() {
             try (
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    PrintWriter out = new PrintWriter(
-                            new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true)) {
+                //UTF-8に統一(文字化け対策)
+                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                    PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)), true)) {
                 String name;
                 int playerId;
                 Player player;
@@ -333,9 +334,20 @@ public class BJserver {
     }
 
     // 全てのプレイヤーに継続意思を確認するメッセージを送信
+    // 観戦中のプレイヤーには専用のメッセージを送る処理を追加
     private static void askForContinuation() {
-        gameInProgress = false; // ゲーム自体は一旦終了
-        broadcast("CONTINUE?");
+        gameInProgress = false; 
+        
+        List<Player> playersInGame = getActivePlayers();
+        List<Player> allOnlinePlayers = new ArrayList<>(getOnlinePlayers());
+
+        for(Player p : allOnlinePlayers){
+            if(playersInGame.contains(p)){
+                p.sendMessage("CONTINUE?");
+            } else if (p.getState() == PlayerState.SPECTATOR) {
+                p.sendMessage("SPECTATOR_NEXT_ROUND");
+            }
+        }
     }
 
     // 継続しないプレイヤーをリストから削除し、次のラウンドの準備を確認する
@@ -349,17 +361,25 @@ public class BJserver {
             return;
         }
 
-        // 残ったプレイヤー全員が次のラウンドの準備ができているか確認
-        for (Player p : players) {
-            if (p.getState() != PlayerState.WAITING && p.getOnlineState()) {
-                return; // まだ意思表示していないプレイヤーがいる
+        boolean allReady = true;
+        for (Player p : getOnlinePlayers()) {
+            if (p.getState() != PlayerState.WAITING && p.getState() != PlayerState.LOGOUT) {
+                allReady = false; 
+                break;
             }
         }
 
-        // 全員が継続を選択したら、次のゲームを開始する
-        System.out.println("All remaining players are ready. Starting next round.");
-        // 既存のゲーム開始ロジックを呼び出す
-        // checkAllPlayersReady();
+        if (allReady) {
+            System.out.println("All remaining players are ready. Starting next round.");
+            gameInProgress = false;
+            
+            dealerCardList.clear();
+            
+            for (Player p : getOnlinePlayers()) {
+                p.resetForNewRound();
+                p.sendMessage("Next round is starting. Please press 'Ready (OK)' to join.");
+            }
+        }
     }
 
     /**

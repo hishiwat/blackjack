@@ -3,6 +3,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 public class BJclient {
@@ -21,6 +22,11 @@ public class BJclient {
     private Player player;
     private ArrayList<String> dealerCardList = new ArrayList<>();
     private boolean isConnected = false;
+
+    // GUI更新用にラベルをフィールドとして宣言
+    private JLabel nameLabel;
+    private JLabel idLabel;
+    private JLabel chipLabel;
 
     public BJclient() {
         createGUI();
@@ -44,9 +50,9 @@ public class BJclient {
         // プレイヤー情報パネル
         JPanel infoPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
         infoPanel.setBorder(BorderFactory.createTitledBorder("Player Info"));
-        JLabel nameLabel = new JLabel("Name: ");
-        JLabel idLabel = new JLabel("ID: ");
-        JLabel chipLabel = new JLabel("Chip: ");
+        nameLabel = new JLabel("Name: ");
+        idLabel = new JLabel("ID: ");
+        chipLabel = new JLabel("Chip: ");
         infoPanel.add(nameLabel);
         infoPanel.add(idLabel);
         infoPanel.add(chipLabel);
@@ -83,6 +89,12 @@ public class BJclient {
         disconnectButton.addActionListener(e -> disconnect());
     }
 
+    private void updateInfoPanel() {
+        nameLabel.setText("Name: " + this.playerName);
+        idLabel.setText("ID: " + this.playerID);
+        chipLabel.setText("Chip: " + this.chip);
+    }
+
     private void showNameDialog() {
         String name = JOptionPane.showInputDialog(frame, "Enter your name:", "Player Name", JOptionPane.PLAIN_MESSAGE);
         if (name != null && !name.trim().isEmpty()) {
@@ -100,8 +112,8 @@ public class BJclient {
             addMessage("Connecting to server at " + addr + ":" + port);
 
             socket = new Socket(addr, port);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)), true);
 
             // 名前を送信
             while (true) {
@@ -144,7 +156,18 @@ public class BJclient {
                         System.out.println("[DEBUG] Received: " + message); // デバッグ用 受信したメッセージを標準出力に表示
                         SwingUtilities.invokeLater(() -> addMessage(message));
 
-                        if (message.equals("Game Start")) {
+                        //クライアント側のチップの増減を実装
+                        if (message.startsWith("Your total chips: ")) {
+                            try {
+                                String newChipStr = message.substring("Your total chips: ".length()).trim();
+                                int newChip = Integer.parseInt(newChipStr);
+                                this.chip = newChip;
+                                player.winChips(newChip - player.getChip());
+                                SwingUtilities.invokeLater(this::updateInfoPanel);
+                            } catch (NumberFormatException e) {
+                                // エラー処理
+                            }
+                        } else if (message.equals("Game Start")) {
                             game();
                         }
                         if (message.equals("Game Reset")) {
@@ -179,12 +202,16 @@ public class BJclient {
                         // ここに追加
                         // if (message.equals("文字列")){操作()}
 
-                        // 10. サーバーからの継続確認メッセージを受け取る
+                        // サーバーからの継続確認メッセージを受け取る
                         if (message.equals("CONTINUE?")) {
                             // ユーザーに継続するかどうかを尋ねるダイアログを表示
                             askToContinue();
                         }
-
+                        if (message.equals("SPECTATOR_NEXT_ROUND")) {
+                            player.resetForNewRound();
+                            addMessage("The previous game has ended. You can join the next round.");
+                            readyButton.setEnabled(true);
+                        }
                     }
                 } catch (IOException e) {
                     SwingUtilities.invokeLater(() -> addMessage("Connection closed by server."));
@@ -288,22 +315,22 @@ public class BJclient {
         SwingUtilities.invokeLater(() -> {
             int choice = JOptionPane.showConfirmDialog(
                     frame,
-                    "もう一度プレイしますか？",
-                    "ゲームを続けますか？",
+                    "Play again?",
+                    "Continue",
                     JOptionPane.YES_NO_OPTION,
                     JOptionPane.QUESTION_MESSAGE);
 
             if (choice == JOptionPane.YES_OPTION) {
                 // 「はい」が選択されたら、サーバーに"CONTINUE_YES"を送信
                 out.println("CONTINUE_YES");
-                addMessage("Sent: CONTINUE_YES (継続します)");
+                addMessage("Sent: CONTINUE_YES");
                 // 次のラウンドに備えてReadyボタンを有効化する
                 readyButton.setEnabled(true);
 
             } else {
                 // 「いいえ」またはダイアログが閉じられたら、"CONTINUE_NO"を送信
                 out.println("CONTINUE_NO");
-                addMessage("Sent: CONTINUE_NO (ゲームを終了します)");
+                addMessage("Sent: CONTINUE_NO");
                 // クライアント側からも切断処理を呼び出す
                 disconnect();
             }
