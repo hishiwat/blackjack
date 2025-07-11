@@ -78,13 +78,6 @@ public class BJclient {
         playerInfoLabel.setFont(new Font("Arial", Font.BOLD, 16));
         topPanel.add(playerInfoLabel, BorderLayout.WEST);
         
-        // ディーラー情報
-        JLabel dealerInfoLabel = new JLabel("Dealer");
-        dealerInfoLabel.setForeground(Color.WHITE);
-        dealerInfoLabel.setFont(new Font("Arial", Font.BOLD, 16));
-        dealerInfoLabel.setHorizontalAlignment(SwingConstants.CENTER);
-        topPanel.add(dealerInfoLabel, BorderLayout.CENTER);
-        
         mainPanel.add(topPanel, BorderLayout.NORTH);
     }
     

@@ -1,6 +1,5 @@
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
 
 public class GamePanel {
     private JPanel gamePanel;
@@ -83,8 +82,8 @@ public class GamePanel {
         // プレイヤーのカードパネル
         playerCardsPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         playerCardsPanel.setBackground(new Color(34, 139, 34));
-        playerCardsPanel.setPreferredSize(new Dimension(0, 150)); // 最小高さを設定
-        playerCardsPanel.setMinimumSize(new Dimension(0, 150));   // 最小高さを保証
+        playerCardsPanel.setPreferredSize(new Dimension(500, 150)); // 最小高さを設定
+        playerCardsPanel.setMinimumSize(new Dimension(500, 150));   // 最小高さを保証
         playerArea.add(playerCardsPanel, BorderLayout.CENTER);
         
         gamePanel.add(playerArea, BorderLayout.CENTER);
@@ -97,7 +96,8 @@ public class GamePanel {
             BorderFactory.createLineBorder(new Color(255, 215, 0), 2),
             BorderFactory.createEmptyBorder(10, 10, 10, 10)
         ));
-        otherPlayersArea.setPreferredSize(new Dimension(250, 0));
+        // 横幅の比を1:1にするため、プレイヤーエリアと同じ幅に設定
+        otherPlayersArea.setPreferredSize(new Dimension(500, 150));
         
         // 他のプレイヤータイトル
         JLabel otherPlayersTitle = new JLabel("Other Players", SwingConstants.CENTER);
