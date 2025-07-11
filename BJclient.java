@@ -3,6 +3,7 @@ import java.awt.*;
 import java.awt.event.*;
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +29,11 @@ public class BJclient {
     private GamePanel gamePanel;
     private boolean cardsProcessing = false; // カード処理中フラグ
     private JLabel playerInfoLabel; // プレイヤー情報表示用ラベル
+
+    // GUI更新用にラベルをフィールドとして宣言
+    private JLabel nameLabel;
+    private JLabel idLabel;
+    private JLabel chipLabel;
 
     public BJclient() {
 		showNameDialog();
@@ -228,6 +234,12 @@ public class BJclient {
         disconnect();
     }
 
+    private void updateInfoPanel() {
+        nameLabel.setText("Name: " + this.playerName);
+        idLabel.setText("ID: " + this.playerID);
+        chipLabel.setText("Chip: " + this.chip);
+    }
+
     private void showNameDialog() {
         String name = JOptionPane.showInputDialog(frame, "Enter your name:", "Player Name", JOptionPane.PLAIN_MESSAGE);
         if (name != null && !name.trim().isEmpty()) {
@@ -245,8 +257,8 @@ public class BJclient {
             addMessage("Connecting to server at " + addr + ":" + port);
 
             socket = new Socket(addr, port);
-            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)), true);
 
             // 名前を送信
             while (true) {
@@ -287,11 +299,26 @@ public class BJclient {
                         System.out.println("Received: " + message); // デバッグ用 受信したメッセージを標準出力に表示
                         SwingUtilities.invokeLater(() -> addMessage(message));
 
-                        if (message.equals("Game Start")) {
+                        //クライアント側のチップの増減を実装
+                        if (message.startsWith("Your total chips: ")) {
+                            try {
+                                String newChipStr = message.substring("Your total chips: ".length()).trim();
+                                int newChip = Integer.parseInt(newChipStr);
+                                this.chip = newChip;
+                                player.winChips(newChip - player.getChip());
+                                SwingUtilities.invokeLater(this::updateInfoPanel);
+                            } catch (NumberFormatException e) {
+                                // エラー処理
+                            }
+                        } else if (message.equals("Game Start")) {
                             SwingUtilities.invokeLater(() -> {
                                 createBetPanel();
                                 addMessage("Game started! Please place your bet.");
                             });
+                        }
+                        if (message.equals("Game Reset")) {
+                            player.resetForNewRound();
+                            readyButton.setEnabled(true);
                         }
 
                         if (message.equals("Cards") && !cardsProcessing) {
@@ -399,7 +426,11 @@ public class BJclient {
                                 addMessage("Do you want to continue playing?");
                             });
                         }
-
+                        if (message.equals("SPECTATOR_NEXT_ROUND")) {
+                            player.resetForNewRound();
+                            addMessage("The previous game has ended. You can join the next round.");
+                            readyButton.setEnabled(true);
+                        }
                     }
                 } catch (IOException e) {
                     SwingUtilities.invokeLater(() -> addMessage("Connection closed by server."));

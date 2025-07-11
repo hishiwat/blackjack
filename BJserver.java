@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class BJserver {
@@ -11,6 +12,8 @@ public class BJserver {
 
     // プレイヤーリスト（スレッドセーフ）
     private static List<Player> players = Collections.synchronizedList(new ArrayList<>());
+    
+    private static boolean showdownCalled = false;
 
     public static void main(String[] args) throws IOException {
         ServerSocket serverSocket = new ServerSocket(PORT);
@@ -37,9 +40,8 @@ public class BJserver {
 
         public void run() {
             try (
-                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-                    PrintWriter out = new PrintWriter(
-                            new BufferedWriter(new OutputStreamWriter(socket.getOutputStream())), true)) {
+                    BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                    PrintWriter out = new PrintWriter(new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)), true)) {
                 String name;
                 int playerId;
                 Player player;
@@ -127,6 +129,18 @@ public class BJserver {
                             if (line.equals("BET canceled")) {
                                 player.setState(PlayerState.SPECTATOR);
                                 checkAllPlayersBet();
+                                List<Player> activePlayers = getActivePlayers();
+                                if (activePlayers.size() == 0) {
+                                    gameInProgress = false;// ゲームのリセット
+                                    System.out.println("All players have cancelled bets. Quit the game.");
+                                    synchronized (players) {
+                                        for (Player p : getOnlinePlayers()) {
+                                            p.setState(PlayerState.WAITING);
+                                            p.sendMessage("Game Reset");
+                                        }
+                                    }
+                                    continue;
+                                }
 
                             } else {
                                 int betAmount = Integer.parseInt(line.substring(4).trim());
@@ -152,16 +166,10 @@ public class BJserver {
                         // カードをもう一枚引く処理
                         // <追加>
                     }
-
+                    
                     if (line.equals("STAND")) {
-                        // 全員がSTAND状態になったら次に進む
-                        // <追加>
-
-                        // ディーラのカード処理
-                        // <追加>
-
-                        // 勝敗判定に移行
-                        judgeAndDistribute();
+                        player.setState(PlayerState.STAND);
+                        checkShowdown();
                     }
 
                     if (line.equals("CONTINUE_YES")) {
@@ -216,6 +224,17 @@ public class BJserver {
         return activePlayers;
     }
 
+    private static List<Player> getOnlinePlayers() {
+        List<Player> onlinePlayers = new ArrayList<>();
+        synchronized (players) {
+            for (Player p : players) {
+                if (p.getOnlineState())
+                    onlinePlayers.add(p);
+            }
+        }
+        return onlinePlayers;
+    }
+
     // activeなプレイヤーの状態がそろっているか確認
     private static boolean allActivePlayersAreInState(PlayerState state) {
         List<Player> activePlayers = getActivePlayers();
@@ -242,14 +261,41 @@ public class BJserver {
 
     private static synchronized boolean checkAllPlayersBet() {
         if (gameInProgress && allActivePlayersAreInState(PlayerState.BET)) {
+            showdownCalled = false;
             dealCards();
             return true;
         }
         return false;
     }
+    
+    // 全員の行動が完了したかを確認し、一度だけ勝敗判定を呼び出す
+    private static synchronized void checkShowdown() {
+        // 既に勝敗判定が呼び出されていれば何もしない
+        if (showdownCalled) {
+            return;
+        }
+
+        List<Player> activePlayers = getActivePlayers();
+        if (activePlayers.isEmpty()) {
+            return;
+        }
+
+        // まだ行動中のプレイヤー(PLAYING)がいるか確認
+        for (Player p : activePlayers) {
+            if (p.getState() == PlayerState.PLAYING) {
+                return; // 全員の行動完了を待つ
+            }
+        }
+
+        // 全員の行動が完了したので、勝敗判定に移行
+        showdownCalled = true;
+        judgeAndDistribute();
+    }
+
 
     // カード配布
     // 各プレイヤーに2枚ずつ，ディーラは1枚
+    // カード配布時にプレイヤーの状態をPLAYINGにする
     private static void dealCards() {
         cardlist.shuffle();
 
@@ -259,6 +305,7 @@ public class BJserver {
 
         List<Player> activePlayers = getActivePlayers();
         for (Player p : activePlayers) {
+            p.setState(PlayerState.PLAYING); // 状態をPLAYINGに変更
             p.sendMessage("Cards");
             for (int i = 0; i < 2; i++) {
                 card = cardlist.getCard();
@@ -279,6 +326,10 @@ public class BJserver {
         }
 
         for (Player p : players) {
+            if(p.getState() == PlayerState.SPECTATOR || p.getState() == PlayerState.LOGOUT) {
+                continue;
+            }
+
             int playerScore = calculateScore(p.getCards());
             boolean playerBust = playerScore > 21;
             String resultMessage;
@@ -301,8 +352,12 @@ public class BJserver {
                 // プレイヤーの負け
                 resultMessage = "You Lose. You lose " + p.getBet() + " chips.";
             }
-            p.sendMessage(resultMessage);
-            p.sendMessage("Your total chips: " + p.getChip());
+
+            // betが0のプレイヤーには結果を送信しない
+            if (p.getBet() > 0) {
+                 p.sendMessage(resultMessage);
+                 p.sendMessage("Your total chips: " + p.getChip());
+            }
         }
 
         // プレイヤーの継続意思を聞く
@@ -310,39 +365,63 @@ public class BJserver {
     }
 
     // 全てのプレイヤーに継続意思を確認するメッセージを送信
+    // 観戦中のプレイヤーには専用のメッセージを送る処理を追加
     private static void askForContinuation() {
-        gameInProgress = false; // ゲーム自体は一旦終了
-        broadcast("CONTINUE?");
+        gameInProgress = false; 
+        
+        List<Player> playersInGame = getActivePlayers();
+        List<Player> allOnlinePlayers = new ArrayList<>(getOnlinePlayers());
+
+        for(Player p : allOnlinePlayers){
+            if(playersInGame.contains(p)){
+                p.sendMessage("CONTINUE?");
+            } else if (p.getState() == PlayerState.SPECTATOR) {
+                p.sendMessage("SPECTATOR_NEXT_ROUND");
+            }
+        }
     }
 
-    // 継続しないプレイヤーをリストから削除し、次のラウンドの準備を確認する
+    // 継続しないプレイヤーはオフラインにし、次のラウンドの準備を確認する
     private static synchronized void checkAllPlayersReadyForNextRound() {
-        // LOGOUT状態のプレイヤーがいればリストから削除
-        players.removeIf(p -> p.getState() == PlayerState.LOGOUT);
+        // LOGOUT状態のプレイヤーをオフラインにする
+        for (Player p : players) {
+            if (p.getState() == PlayerState.LOGOUT) {
+                p.setOffline();
+            }
+        }
 
-        if (players.isEmpty()) {
+        // オンラインのプレイヤーが誰もいなくなったら待機
+        if (getOnlinePlayers().isEmpty()) {
             System.out.println("All players left. Waiting for new connections.");
             gameInProgress = false;
             return;
         }
 
-        // 残ったプレイヤー全員が次のラウンドの準備ができているか確認
-        for (Player p : players) {
-            if (p.getState() != PlayerState.WAITING && p.getOnlineState()) {
-                return; // まだ意思表示していないプレイヤーがいる
+        boolean allReady = true;
+        for (Player p : getOnlinePlayers()) {
+            // LOGOUT状態のプレイヤーは次のラウンドの準備判定から除外
+            if (p.getState() != PlayerState.WAITING && p.getState() != PlayerState.LOGOUT) {
+                allReady = false;
+                break;
             }
         }
 
-        // 全員が継続を選択したら、次のゲームを開始する
-        System.out.println("All remaining players are ready. Starting next round.");
-        // 既存のゲーム開始ロジックを呼び出す
-        // checkAllPlayersReady();
+        if (allReady) {
+            System.out.println("All remaining players are ready. Starting next round.");
+            gameInProgress = false;
+
+            dealerCardList.clear();
+
+            for (Player p : getOnlinePlayers()) {
+                p.resetForNewRound();
+                p.sendMessage("Next round is starting. Please press 'Ready (OK)' to join.");
+            }
+        }
     }
 
     /**
      * 補助メソッド：手札の点数を計算する
-     * 
-     * @param cards 手札のリスト
+     * * @param cards 手札のリスト
      * @return 点数
      */
     private static int calculateScore(ArrayList<String> cards) {
@@ -368,8 +447,7 @@ public class BJserver {
 
     /**
      * 補助メソッド：全プレイヤーにメッセージを送信する
-     * 
-     * @param message 送信するメッセージ
+     * * @param message 送信するメッセージ
      */
     private static void broadcast(String message) {
         for (Player p : players) {
