@@ -163,12 +163,23 @@ public class BJserver {
                     }
 
                     if (line.equals("HIT")) {
-                        // カードをもう一枚引く処理
-                        // <追加>
+                        String card = cardlist.getCard();  // ランダムにカードを引く
+                        player.addCard(card);              // プレイヤーの手札に追加
+                        out.println(card);                 // クライアントにカードを送信
+
+                        int score = calculateScore(player.getCards());
+                        if (score > 21) {
+                            player.setState(PlayerState.STAND);
+                            out.println("BUST");
+                            checkShowdown(); // 自動でSTAND扱いとして判定
+                        }else {
+                            out.println("YOUR_TURN"); // クライアントが再び操作できるようにする
+                        }
                     }
                     
                     if (line.equals("STAND")) {
                         player.setState(PlayerState.STAND);
+                        sendNextTurn(player); //次の人にターンを移す
                         checkShowdown();
                     }
 
@@ -208,6 +219,24 @@ public class BJserver {
         }
         return null;
     }
+
+    //次の人にターンを移す
+    private static void sendNextTurn(Player current) {
+        List<Player> activePlayers = getActivePlayers();
+        int currentIndex = activePlayers.indexOf(current);
+
+        for (int i = currentIndex + 1; i < activePlayers.size(); i++) {
+            Player next = activePlayers.get(i);
+            if (next.getState() == PlayerState.PLAYING) {
+                next.sendMessage("YOUR_TURN");
+                return;
+            }
+        }
+
+    // 残りの誰も PLAYING 状態でなければ勝敗判定
+    checkShowdown();
+    }
+
 
     // オンラインでかつ観戦モード・ログアウトでないプレイヤーのみ
     private static List<Player> getActivePlayers() {
@@ -314,6 +343,12 @@ public class BJserver {
 
             }
             p.sendMessage("Dealer Card " + dealerCardList.get(0));
+        }
+
+        //最初の人のターンにする
+        if (!activePlayers.isEmpty()) {
+            Player firstPlayer = activePlayers.get(0);
+            firstPlayer.sendMessage("YOUR_TURN");
         }
     }
 
