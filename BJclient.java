@@ -28,6 +28,10 @@ public class BJclient {
     private JLabel idLabel;
     private JLabel chipLabel;
 
+    //HITSTAND処理で追加
+    private JButton hitButton;
+    private JButton standButton;
+
     public BJclient() {
         createGUI();
 
@@ -72,9 +76,17 @@ public class BJclient {
         readyButton = new JButton("Ready (OK)");
         listButton = new JButton("Show Players (LIST)");
         JButton disconnectButton = new JButton("Disconnect (END)");
+        
+        //HITSTANDで追加
+        hitButton = new JButton("Hit");
+        standButton = new JButton("Stand");
 
         readyButton.setEnabled(false);
         listButton.setEnabled(false);
+
+        //HITSTANDで追加
+        hitButton.setEnabled(false);
+        standButton.setEnabled(false);
 
         buttonPanel.add(readyButton);
         buttonPanel.add(listButton);
@@ -83,10 +95,18 @@ public class BJclient {
 
         frame.add(mainPanel);
 
+        //HITSTANDで追加
+        buttonPanel.add(hitButton);
+        buttonPanel.add(standButton);
+
         // イベントリスナー
         readyButton.addActionListener(e -> sendReady());
         listButton.addActionListener(e -> sendList());
         disconnectButton.addActionListener(e -> disconnect());
+
+        // アクションリスナ追加
+        hitButton.addActionListener(e -> onHit());
+        standButton.addActionListener(e -> onStand());
     }
 
     private void updateInfoPanel() {
@@ -196,11 +216,39 @@ public class BJclient {
                             }
 
                             // HITandSTAND処理
-                            hit_stand();
+                            //hit_stand();
                         }
 
-                        // ここに追加
+                        //  ここに追加
                         // if (message.equals("文字列")){操作()}
+                        if (message.startsWith("HIT_CARD:")) {
+                            String card = message.substring("HIT_CARD:".length());
+                            SwingUtilities.invokeLater(() -> {
+                                addMessage("You drew: " + card);
+                                player.addCard(card);
+                            });
+                        }
+
+                        if (message.equals("BURST")) {
+                            SwingUtilities.invokeLater(() -> {
+                                addMessage("You busted!");
+                                hitButton.setEnabled(false);
+                                standButton.setEnabled(false);
+                            });
+                        }
+
+                        if (message.equals("YOUR_TURN")) {
+                            SwingUtilities.invokeLater(() -> {
+                                hitButton.setEnabled(true);
+                                standButton.setEnabled(true);
+                            });
+                        }   
+
+
+                        if (message.equals("ROUND_END")) {
+                            addMessage("Round has ended. Please wait for the next round.");
+                        }
+
 
                         // サーバーからの継続確認メッセージを受け取る
                         if (message.equals("CONTINUE?")) {
@@ -304,11 +352,30 @@ public class BJclient {
         frame.setVisible(true);
     }
 
-    public void hit_stand() {
-        // <追加>
-        // カードをもう一枚引く場合はHIT，もう引かない場合はSTAND
+    /*public void hit_stand() {
+         <追加>
+         カードをもう一枚引く場合はHIT，もう引かない場合はSTAND
         out.println("STAND");
-    }
+    }*/
+
+    /*onHit()とonStand()に分けてイベント駆動的に処理することで
+    ボタンを使った操作が便利になるようにしています*/
+        public void onHit() {
+            out.println("HIT");
+            addMessage("Sent: HIT");
+            hitButton.setEnabled(false);
+            standButton.setEnabled(false);
+        }
+
+    public void onStand() {
+        out.println("STAND");
+        addMessage("You chose to stand.");
+
+        //ボタンを無効化
+        hitButton.setEnabled(false);
+        standButton.setEnabled(false);
+        }
+
 
     // ユーザーにゲームを継続するか聞き、結果をサーバーに送信する
     private void askToContinue() {
