@@ -1,18 +1,16 @@
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
-
-
 public class Player {
     private String name;
     private int id;
     private int chip;
     private int bet;
     private PlayerState state;
-    private boolean _isOnline;
     private PrintWriter out;
     private ArrayList<String> cardList = new ArrayList<>();
-
+    private boolean _isOnline = true;
+    
     public Player(String name, int id, int chip, PrintWriter out) {
         this.name = name;
         this.id = id;
@@ -20,7 +18,6 @@ public class Player {
         this.bet = 0;
         this.state = PlayerState.WAITING;
         this.out = out;
-        this._isOnline = true;
     }
 
     public String getName() {
@@ -43,7 +40,7 @@ public class Player {
         return state;
     }
 
-    public boolean getOnlineState() {
+     public boolean getOnlineState() {
         return _isOnline;
     }
 
@@ -72,6 +69,40 @@ public class Player {
         return cardList;
     }
 
+    public int getScore() {
+        int total = 0;
+        int aceCount = 0;
+
+        for (String card : cardList) {
+            String rank = card.substring(1); 
+            switch (rank) {
+                case "J":
+                case "Q":
+                case "K":
+                    total += 10;
+                break;
+                case "A":
+                    total += 11;
+                    aceCount++;
+                    break;
+                default:
+                    total += Integer.parseInt(rank);
+            }
+        }
+
+        while (total > 21 && aceCount > 0) {
+            total -= 10;
+            aceCount--;
+        }
+
+        return total;
+    }
+
+    public void addCard(String card) {
+        cardList.add(card);
+    }
+
+
     public void sendMessage(String message) {
         out.println(message);
     }
@@ -87,6 +118,6 @@ public class Player {
     }
 
     public void setOut(PrintWriter out) {
-        this.out = out;
+        this._out = out;
     }
 }
