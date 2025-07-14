@@ -1,8 +1,6 @@
 import java.io.PrintWriter;
 import java.util.ArrayList;
 
-
-
 public class Player {
     private String name;
     private int id;
@@ -72,12 +70,50 @@ public class Player {
         return cardList;
     }
 
+    public int getScore() {
+        int total = 0;
+        int aceCount = 0;
+
+        for (String card : cardList) {
+            String rank = card.substring(1); 
+            switch (rank) {
+                case "J":
+                case "Q":
+                case "K":
+                    total += 10;
+                break;
+                case "A":
+                    total += 11;
+                    aceCount++;
+                    break;
+                default:
+                    total += Integer.parseInt(rank);
+            }
+        }
+
+        while (total > 21 && aceCount > 0) {
+            total -= 10;
+            aceCount--;
+        }
+
+        return total;
+    }
+
+    public void addCard(String card) {
+        cardList.add(card);
+    }
+
+
     public void sendMessage(String message) {
         out.println(message);
     }
 
     public void winChips(int amount) {
         this.chip += amount;
+    }
+
+    public void setChip(int chip) {
+        this.chip = chip;
     }
 
     public void resetForNewRound() {

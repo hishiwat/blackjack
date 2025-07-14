@@ -1,20 +1,15 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
 import java.io.*;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import javax.swing.Timer;
 
 public class BJclient {
     private JFrame frame;
     private JTextArea messageArea;
-    private JTextField inputField;
-    private JButton sendButton;
     private JButton readyButton;
-    private JButton listButton;
     private PrintWriter out;
     private BufferedReader in;
     private Socket socket;
@@ -30,11 +25,6 @@ public class BJclient {
     private boolean cardsProcessing = false; // カード処理中フラグ
     private JLabel playerInfoLabel; // プレイヤー情報表示用ラベル
 
-    // GUI更新用にラベルをフィールドとして宣言
-    private JLabel nameLabel;
-    private JLabel idLabel;
-    private JLabel chipLabel;
-
     public BJclient() {
 		showNameDialog();
         createGUI();
@@ -42,12 +32,12 @@ public class BJclient {
     }
 
     private void createGUI() {
-        frame = new JFrame("Blackjack Casino Table");
+        frame = new JFrame("Blackjack");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(1200, 800);
         frame.setLocationRelativeTo(null);
         
-        // カジノテーブル風の背景色
+        // 背景色
         Color casinoGreen = new Color(34, 139, 34);
         frame.getContentPane().setBackground(casinoGreen);
 
@@ -69,6 +59,7 @@ public class BJclient {
         frame.add(mainPanel);
     }
     
+	// 上部情報パネルを作成
     private void createTopInfoPanel(JPanel mainPanel) {
         Color casinoGreen = new Color(34, 139, 34);
         JPanel topPanel = new JPanel(new BorderLayout());
@@ -87,8 +78,7 @@ public class BJclient {
         mainPanel.add(topPanel, BorderLayout.NORTH);
     }
     
-    // createGameAreaメソッドは削除（GamePanelクラスで処理）
-    
+	// コントロールパネルを作成
     private void createControlPanel(JPanel mainPanel) {
         Color casinoGreen = new Color(34, 139, 34);
         JPanel controlPanel = new JPanel(new BorderLayout(10, 10));
@@ -104,7 +94,7 @@ public class BJclient {
         messageArea.setLineWrap(true);
         messageArea.setWrapStyleWord(true);
         messageArea.setBackground(new Color(245, 245, 245));
-        messageArea.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        messageArea.setFont(new Font("Monospaced", Font.PLAIN, 14));
         JScrollPane scrollPane = new JScrollPane(messageArea);
         scrollPane.setBorder(BorderFactory.createTitledBorder("Game Messages"));
         controlPanel.add(scrollPane, BorderLayout.CENTER);
@@ -114,23 +104,18 @@ public class BJclient {
         buttonPanel.setBackground(casinoGreen);
         
         readyButton = new JButton("Ready");
-        listButton = new JButton("Show Players");
         JButton disconnectButton = new JButton("Disconnect");
         
         // ボタンのスタイル設定
         Color buttonColor = new Color(70, 130, 180);
         readyButton.setBackground(buttonColor);
         readyButton.setForeground(Color.WHITE);
-        listButton.setBackground(buttonColor);
-        listButton.setForeground(Color.WHITE);
         disconnectButton.setBackground(new Color(220, 20, 60));
         disconnectButton.setForeground(Color.WHITE);
         
         readyButton.setEnabled(false);
-        listButton.setEnabled(false);
         
         buttonPanel.add(readyButton);
-        buttonPanel.add(listButton);
         buttonPanel.add(disconnectButton);
         
         controlPanel.add(buttonPanel, BorderLayout.SOUTH);
@@ -139,7 +124,6 @@ public class BJclient {
         
         // イベントリスナー
         readyButton.addActionListener(e -> sendReady());
-        listButton.addActionListener(e -> sendList());
         disconnectButton.addActionListener(e -> disconnect());
     }
     
@@ -149,25 +133,13 @@ public class BJclient {
         frame.revalidate();
         frame.repaint();
     }
-    
-    private void createActionPanel() {
-        gamePanel.createActionPanel();
-        gamePanel.getHitButton().addActionListener(e -> sendHit());
-        gamePanel.getStandButton().addActionListener(e -> sendStand());
-        frame.revalidate();
-        frame.repaint();
-    }
-    
+
     private void createContinuePanel() {
         gamePanel.createContinuePanel();
         gamePanel.getContinueYesButton().addActionListener(e -> sendContinueYes());
         gamePanel.getContinueNoButton().addActionListener(e -> sendContinueNo());
         frame.revalidate();
         frame.repaint();
-    }
-    
-    private JLabel createCardLabel(String cardCode) {
-        return CardDisplay.createCardLabel(cardCode);
     }
     
     private void updatePlayerInfo() {
@@ -189,7 +161,6 @@ public class BJclient {
             }
             
             out.println("BET " + bet);
-            addMessage("[DEBUG] Sent bet: " + bet);
             player.chipBet(bet);
             chip = player.getChip(); // チップ情報を更新
 			updatePlayerInfo();
@@ -198,46 +169,30 @@ public class BJclient {
             gamePanel.removePanel(gamePanel.getBetPanel());
             frame.revalidate();
             frame.repaint();
-            addMessage("[DEBUG] Bet panel removed, waiting for cards...");
             
         } catch (NumberFormatException ex) {
             addMessage("Please enter a valid number.");
         }
     }
     
-    private void sendHit() {
-        out.println("HIT");
-        addMessage("Sent: HIT");
-        gamePanel.getHitButton().setEnabled(false);
-        gamePanel.getStandButton().setEnabled(false);
-    }
-    
-    private void sendStand() {
-        out.println("STAND");
-        addMessage("Sent: STAND");
-        gamePanel.getHitButton().setEnabled(false);
-        gamePanel.getStandButton().setEnabled(false);
-    }
-    
     private void sendContinueYes() {
         out.println("CONTINUE_YES");
-        addMessage("Sent: CONTINUE_YES (継続します)");
         readyButton.setEnabled(true);
         gamePanel.removePanel(gamePanel.getContinuePanel());
+		gamePanel.clearDealerCards();
+		gamePanel.clearPlayerCards();
+		gamePanel.updateDealerScore(-1);
+		gamePanel.updatePlayerScore(-1);
+		player.resetForNewRound();
+		dealerCardList.clear();
+		addMessage("Next round is starting. Please press 'Ready' to join the game.");
         frame.revalidate();
         frame.repaint();
     }
     
     private void sendContinueNo() {
         out.println("CONTINUE_NO");
-        addMessage("Sent: CONTINUE_NO (ゲームを終了します)");
         disconnect();
-    }
-
-    private void updateInfoPanel() {
-        nameLabel.setText("Name: " + this.playerName);
-        idLabel.setText("ID: " + this.playerID);
-        chipLabel.setText("Chip: " + this.chip);
     }
 
     private void showNameDialog() {
@@ -280,15 +235,20 @@ public class BJclient {
                     if (response.equals("Inprogress")) {
                         addMessage("You are in spectator mode");
                         player.setState(PlayerState.SPECTATOR);
-                    }
+						readyButton.setEnabled(false);
+                    } else {
+						addMessage("Please press 'Ready' to join the game.");
+						readyButton.setEnabled(true);
+					}
 
                     break;
                 }
             }
 
             isConnected = true;
-            readyButton.setEnabled(true);
-            listButton.setEnabled(true);
+
+            // 定期的に他のプレイヤー情報を要求するタイマーを開始
+            startOtherPlayersUpdateTimer();
 
             // サーバーからのメッセージ受信用スレッド
             Thread readerThread = new Thread(() -> {
@@ -296,33 +256,30 @@ public class BJclient {
                     String line;
                     while ((line = in.readLine()) != null) {
                         final String message = line;
-                        System.out.println("Received: " + message); // デバッグ用 受信したメッセージを標準出力に表示
-                        SwingUtilities.invokeLater(() -> addMessage(message));
 
                         //クライアント側のチップの増減を実装
                         if (message.startsWith("Your total chips: ")) {
-                            try {
-                                String newChipStr = message.substring("Your total chips: ".length()).trim();
-                                int newChip = Integer.parseInt(newChipStr);
-                                this.chip = newChip;
-                                player.winChips(newChip - player.getChip());
-                                SwingUtilities.invokeLater(this::updateInfoPanel);
-                            } catch (NumberFormatException e) {
-                                // エラー処理
-                            }
-                        } else if (message.equals("Game Start")) {
+							String newChipStr = message.substring("Your total chips: ".length()).trim();
+							int newChip = Integer.parseInt(newChipStr);
+							this.chip = newChip;
+							player.winChips(newChip - player.getChip());
+							SwingUtilities.invokeLater(() -> {
+								updatePlayerInfo();
+							});
+                        } else if (message.equals("GAME_START")) {
                             SwingUtilities.invokeLater(() -> {
                                 createBetPanel();
                                 addMessage("Game started! Please place your bet.");
+                                // 他のプレイヤー情報を要求
+                                out.println("GET_OTHER_PLAYERS");
                             });
                         }
-                        if (message.equals("Game Reset")) {
+                        if (message.equals("GAME_RESET")) {
                             player.resetForNewRound();
                             readyButton.setEnabled(true);
                         }
 
-                        if (message.equals("Cards") && !cardsProcessing) {
-                            addMessage("[DEBUG] Received Cards message, starting card collection...");
+                        if (message.equals("CARDS") && !cardsProcessing) {
                             cardsProcessing = true; // フラグを設定
                                 try {
                                 // 2枚のカードを受け取りリストに格納
@@ -330,17 +287,15 @@ public class BJclient {
                                 
                                 for (int i = 0; i < 2; i++) {
                                     String card = in.readLine();
-                                    addMessage("[DEBUG] Received player card " + (i+1) + ": " + card);
-                                        playerCards.add(card);
+                                    if (card.startsWith("PLAYER_CARD:")) {
+                                        card = card.substring("PLAYER_CARD:".length());
+                                    }
+                                    playerCards.add(card);
                                 }
                                 
-                                // ディーラーのカード
+                                	// ディーラーのカード
                                     String dealerLine = in.readLine();
-                                    addMessage("[DEBUG] Dealer line: " + dealerLine);
-                                    String dealerCard = dealerLine.substring("Dealer Card ".length()).trim();
-                                
-                                addMessage("[DEBUG] Collected " + playerCards.size() + " player cards: " + playerCards);
-                                addMessage("[DEBUG] Dealer card: " + dealerCard);
+                                    String dealerCard = dealerLine.substring("DEALER_CARD:".length()).trim();
                                 
                                 // すべてのカードを収集した後、UIを更新
                                 final ArrayList<String> finalPlayerCards = playerCards;
@@ -349,81 +304,133 @@ public class BJclient {
                                 SwingUtilities.invokeLater(() -> {
                                                                             // プレイヤーのカードをクリアして表示
                                         gamePanel.clearPlayerCards();
-                                        addMessage("[DEBUG] Cleared player cards panel");
                                         
                                         // プレイヤーのカードを表示
                                         for (String card : finalPlayerCards) {
                                             player.setCard(card);
-                                            addMessage("[DEBUG] Creating card label for: " + card);
                                             gamePanel.addPlayerCard(card);
-                                            addMessage("Your card: " + card);
                                         }
                                         
-                                        addMessage("[DEBUG] Player cards panel component count: " + gamePanel.getPlayerCardsPanel().getComponentCount());
-                                        addMessage("[DEBUG] Player cards panel size: " + gamePanel.getPlayerCardsPanel().getSize());
+                                        // プレイヤーのスコアを更新
+                                        int playerScore = player.getScore();
+                                        gamePanel.updatePlayerScore(playerScore);
                                         
                                         // ディーラーのカードを表示
                                         if (finalDealerCard != null) {
                                             dealerCardList.add(finalDealerCard);
                                             gamePanel.clearDealerCards();
                                             gamePanel.addDealerCard(finalDealerCard);
-                                            addMessage("Dealer's Card: " + finalDealerCard);
                                         }
                                     
                                                                             // HIT/STANDボタンを表示
-                                        createActionPanel();
-                                        addMessage("Your turn! Choose HIT or STAND.");
+                                        gamePanel.createGameActionPanel();
+                                        gamePanel.getHitButton().addActionListener(e -> onHit());
+                                        gamePanel.getStandButton().addActionListener(e -> onStand());
+                                        addMessage("Choose HIT or STAND.");
                                         frame.revalidate();
                                         frame.repaint();
-                                        addMessage("[DEBUG] Cards processing completed");
-                                        cardsProcessing = false; // フラグをリセット
                                 });
                                 
                             } catch (IOException e) {
-                                addMessage("[ERROR] Failed to process cards: " + e.getMessage());
+                                addMessage("Failed to process cards: " + e.getMessage());
                                 e.printStackTrace();
                             } finally {
                                 cardsProcessing = false; // フラグをリセット
                             }
                         }
 
-                        // プレイヤーリスト情報
-                        if (message.startsWith("PLAYER_LIST:")) {
-                            String playerListInfo = message.substring("PLAYER_LIST:".length());
-                            updateOtherPlayers(playerListInfo);
-                        }
-                        
-                        // HIT後のカード追加
+                        // HIT後のカード追加処理
                         if (message.startsWith("HIT_CARD:")) {
                             String cardCode = message.substring("HIT_CARD:".length());
                             addCardToPlayer(cardCode);
+                        }
+
+                        // バースト処理
+                        if (message.equals("BUST")) {
+                            SwingUtilities.invokeLater(() -> {
+                                gamePanel.getHitButton().setEnabled(false);
+                                gamePanel.getStandButton().setEnabled(false);
+                            });
+                        }
+
+                        // ターン開始
+                        if (message.equals("YOUR_TURN")) {
+                            SwingUtilities.invokeLater(() -> {
+                                gamePanel.getHitButton().setEnabled(true);
+                                gamePanel.getStandButton().setEnabled(true);
+                            });
+                        }
+
+                        // 他のプレイヤーの詳細情報
+                        if (message.startsWith("OTHER_PLAYERS_INFO:")) {
+                            String otherPlayersInfo = message.substring("OTHER_PLAYERS_INFO:".length());
+                            SwingUtilities.invokeLater(() -> {
+                                gamePanel.updateOtherPlayersDetailed(otherPlayersInfo, playerName);
+                                frame.revalidate();
+                                frame.repaint();
+                            });
                         }
                         
                         // ディーラーのカード追加
                         if (message.startsWith("DEALER_CARD:")) {
                             String cardCode = message.substring("DEALER_CARD:".length());
-                            addCardToDealer(cardCode);
-                        }
-                        
-                        // ゲーム結果
-                        if (message.startsWith("RESULT:")) {
-                            String result = message.substring("RESULT:".length());
                             SwingUtilities.invokeLater(() -> {
-                                addMessage("Game Result: " + result);
-                                // アクションパネルを非表示
-                                if (gamePanel.getActionPanel() != null) {
-                                    gamePanel.removePanel(gamePanel.getActionPanel());
-                                    frame.revalidate();
-                                    frame.repaint();
+                                addCardToDealer(cardCode);
+                            });
+                        }
+
+                        // ゲーム結果（サーバーからの直接メッセージ）
+                        if (message.startsWith("GAME_RESULT:")) {
+							String resultMessage = message.substring("GAME_RESULT:".length());
+                            SwingUtilities.invokeLater(() -> {
+                                
+                                // hitとstandボタンを無効化
+                                gamePanel.getHitButton().setEnabled(false);
+                                gamePanel.getStandButton().setEnabled(false);
+                                
+                                // 結果をGUIに反映
+                                int chipChange = 0;
+                                if (resultMessage.startsWith("You Win!")) {
+                                    chipChange = Integer.parseInt(resultMessage.substring("You Win! You get ".length(), resultMessage.indexOf(" chips.")).trim()); // 勝利時のチップ増加
+                                } else if (resultMessage.startsWith("Push (Draw)")) {
+                                    chipChange = player.getBet(); // 引き分け
+                                } else if (message.startsWith("You Busted!") || message.startsWith("You Lose")) {
+                                    chipChange = 0;
                                 }
+                                
+                                gamePanel.createResultPanel(resultMessage, chipChange - player.getBet());
+								addMessage(resultMessage);
+                                frame.revalidate();
+                                frame.repaint();
                             });
                         }
                         
-                        // 継続確認メッセージ
+                        // チップ情報更新
+                        if (message.startsWith("Your total chips:")) {
+                            String chipStr = message.substring("Your total chips: ".length());
+                            try {
+                                int newChip = Integer.parseInt(chipStr);
+                                player.setChip(newChip);
+                                updatePlayerInfo();
+                            } catch (NumberFormatException e) {
+                                addMessage("Error parsing chip amount: " + chipStr);
+                            }
+                        }
+                        
+                        // サーバーからの継続確認メッセージを受け取る
                         if (message.equals("CONTINUE?")) {
                             SwingUtilities.invokeLater(() -> {
+                                // 既存のパネルをすべて削除
+                                if (gamePanel.getActionPanel() != null && gamePanel.getActionPanel().getParent() != null) {
+                                    gamePanel.getActionPanel().getParent().remove(gamePanel.getActionPanel());
+                                }
+                                if (gamePanel.getResultPanel() != null && gamePanel.getResultPanel().getParent() != null) {
+                                    gamePanel.getResultPanel().getParent().remove(gamePanel.getResultPanel());
+                                }
+                                
                                 createContinuePanel();
-                                addMessage("Do you want to continue playing?");
+                                frame.revalidate();
+                                frame.repaint();
                             });
                         }
                         if (message.equals("SPECTATOR_NEXT_ROUND")) {
@@ -449,22 +456,14 @@ public class BJclient {
     private void sendReady() {
         if (isConnected) {
             out.println("OK");
-            addMessage("Sent: OK (Ready)");
             readyButton.setEnabled(false);
         }
     }
 
-    private void sendList() {
-        if (isConnected) {
-            out.println("LIST");
-            addMessage("Sent: LIST");
-        }
-    }
 
     private void disconnect() {
         if (isConnected) {
             out.println("END");
-            addMessage("Sent: END");
             try {
                 socket.close();
             } catch (IOException e) {
@@ -472,7 +471,6 @@ public class BJclient {
             }
             isConnected = false;
             readyButton.setEnabled(false);
-            listButton.setEnabled(false);
         }
         System.exit(0);
     }
@@ -486,27 +484,33 @@ public class BJclient {
         frame.setVisible(true);
     }
 
+    // イベント処理
+    public void onHit() {
+        out.println("HIT");
+        gamePanel.getHitButton().setEnabled(false);
+        gamePanel.getStandButton().setEnabled(false);
+    }
+
+    public void onStand() {
+        out.println("STAND");
+        gamePanel.getHitButton().setEnabled(false);
+        gamePanel.getStandButton().setEnabled(false);
+    }
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             new BJclient().show();
         });
     }
 
-    // 他のプレイヤーの情報を表示するメソッド
-    private void updateOtherPlayers(String playerListInfo) {
-        SwingUtilities.invokeLater(() -> {
-            gamePanel.updateOtherPlayers(playerListInfo, playerName);
-            frame.revalidate();
-            frame.repaint();
-        });
-    }
     
     // カードを追加表示するメソッド（HIT時に使用）
     private void addCardToPlayer(String cardCode) {
         SwingUtilities.invokeLater(() -> {
             player.setCard(cardCode);
             gamePanel.addPlayerCard(cardCode);
-            addMessage("Your new card: " + cardCode);
+            // プレイヤーのスコアを更新
+            int playerScore = player.getScore();
+            gamePanel.updatePlayerScore(playerScore);
             frame.revalidate();
             frame.repaint();
         });
@@ -517,9 +521,46 @@ public class BJclient {
         SwingUtilities.invokeLater(() -> {
             dealerCardList.add(cardCode);
             gamePanel.addDealerCard(cardCode);
-            addMessage("Dealer's new card: " + cardCode);
+            // ディーラーのスコアを更新
+            int dealerScore = calculateDealerScore();
+            gamePanel.updateDealerScore(dealerScore);
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    // ディーラーのスコアを計算するメソッド
+    private int calculateDealerScore() {
+        int score = 0;
+        int aceCount = 0;
+        
+        for (String card : dealerCardList) {
+            String cardNum = card.substring(1);
+            if (cardNum.equals("A")) {
+                aceCount++;
+                score += 11;
+            } else if ("JQK10".contains(cardNum)) {
+                score += 10;
+            } else {
+                score += Integer.parseInt(cardNum);
+            }
+        }
+        
+        while (score > 21 && aceCount > 0) {
+            score -= 10;
+            aceCount--;
+        }
+        
+        return score;
+    }
+
+    // 定期的に他のプレイヤー情報を更新するタイマーを開始
+    private void startOtherPlayersUpdateTimer() {
+        Timer timer = new Timer(2000, e -> {
+            if (isConnected) {
+                out.println("GET_OTHER_PLAYERS");
+            }
+        });
+        timer.start();
     }
 }

@@ -7,13 +7,9 @@ public class CardDisplay {
      * カードコードからカードラベルを作成
      */
     public static JLabel createCardLabel(String cardCode) {
-        System.out.println("[DEBUG] createCardLabel called with: " + cardCode);
-        
         // カードの内容を解析
         String suit = cardCode.substring(0, 1);
         String rank = cardCode.substring(1);
-        
-        System.out.println("[DEBUG] Parsed suit: " + suit + ", rank: " + rank);
         
         // スートの色を決定
         Color suitColor = (suit.equals("H") || suit.equals("D")) ? Color.RED : Color.BLACK;
@@ -21,13 +17,10 @@ public class CardDisplay {
         // スート記号
         String suitSymbol = getSuitSymbol(suit);
         
-        System.out.println("[DEBUG] suitSymbol: " + suitSymbol + ", rankDisplay: " + rank + ", suitColor: " + suitColor);
-        
         return new JLabel() {
             @Override
             public void paintComponent(Graphics g) {
                 super.paintComponent(g);
-                System.out.println("[DEBUG] paintComponent called, size: " + getWidth() + "x" + getHeight());
                 Graphics2D g2d = (Graphics2D) g;
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);

@@ -104,17 +104,12 @@ public class BJserver {
                         break;
                     }
 
-                    // プレイヤー一覧を表示したい場合
-                    if (line.equals("LIST")) {
-                        out.println("=== Player List ===");
-                        synchronized (players) {
-                            for (Player p : players) {
-                                if (p.getOnlineState())
-                                    out.println(
-                                            "ID: " + p.getID() + ", Name: " + p.getName() + ", chip: " + p.getChip());
-                            }
-                        }
-                        out.println("=== End of List ===");
+
+
+                    // 他のプレイヤー情報を要求された場合
+                    if (line.equals("GET_OTHER_PLAYERS")) {
+                        String otherPlayersInfo = getOtherPlayersInfo(player.getName());
+                        out.println("OTHER_PLAYERS_INFO:" + otherPlayersInfo);
                     }
 
                     // ゲーム開始の応答表示
@@ -136,7 +131,7 @@ public class BJserver {
                                     synchronized (players) {
                                         for (Player p : getOnlinePlayers()) {
                                             p.setState(PlayerState.WAITING);
-                                            p.sendMessage("Game Reset");
+                                            p.sendMessage("GAME_RESET");
                                         }
                                     }
                                     continue;
@@ -163,13 +158,30 @@ public class BJserver {
                     }
 
                     if (line.equals("HIT")) {
-                        // カードをもう一枚引く処理
-                        // <追加>
+                        String card = cardlist.getCard();  // ランダムにカードを引く
+                        player.addCard(card);              // プレイヤーの手札に追加
+                        out.println("HIT_CARD:" + card);   // クライアントにカードを送信
+
+                        int score = calculateScore(player.getCards());
+                        if (score > 21) {
+                            player.setState(PlayerState.STAND);
+                            out.println("BUST");
+                            checkShowdown(); // 自動でSTAND扱いとして判定
+                        } else {
+                            out.println("YOUR_TURN"); // クライアントが再び操作できるようにする
+                        }
+                        
+                        // 他のプレイヤー情報を更新
+                        broadcastOtherPlayersInfo();
                     }
                     
                     if (line.equals("STAND")) {
                         player.setState(PlayerState.STAND);
+                        sendNextTurn(player); //次の人にターンを移す
                         checkShowdown();
+                        
+                        // 他のプレイヤー情報を更新
+                        broadcastOtherPlayersInfo();
                     }
 
                     if (line.equals("CONTINUE_YES")) {
@@ -208,6 +220,50 @@ public class BJserver {
         }
         return null;
     }
+
+    // 他のプレイヤーの詳細情報を取得
+    private static String getOtherPlayersInfo(String currentPlayerName) {
+        StringBuilder info = new StringBuilder();
+        synchronized (players) {
+            for (Player p : players) {
+                if (p.getOnlineState() && !p.getName().equals(currentPlayerName)) {
+                    info.append(p.getName()).append("|");
+                    info.append(p.getChip()).append("|");
+                    info.append(p.getBet()).append("|");
+                    info.append(p.getState()).append("|");
+                    // カード情報を追加（ゲーム中のみ）
+                    if (gameInProgress && p.getCards().size() > 0) {
+                        for (String card : p.getCards()) {
+                            info.append(card).append(",");
+                        }
+                        if (!p.getCards().isEmpty()) {
+                            info.setLength(info.length() - 1); // 最後のカンマを削除
+                        }
+                    }
+                    info.append(";");
+                }
+            }
+        }
+        return info.toString();
+    }
+
+    //次の人にターンを移す
+    private static void sendNextTurn(Player current) {
+        List<Player> activePlayers = getActivePlayers();
+        int currentIndex = activePlayers.indexOf(current);
+
+        for (int i = currentIndex + 1; i < activePlayers.size(); i++) {
+            Player next = activePlayers.get(i);
+            if (next.getState() == PlayerState.PLAYING) {
+                next.sendMessage("YOUR_TURN");
+                return;
+            }
+        }
+
+    // 残りの誰も PLAYING 状態でなければ勝敗判定
+    checkShowdown();
+    }
+
 
     // オンラインでかつ観戦モード・ログアウトでないプレイヤーのみ
     private static List<Player> getActivePlayers() {
@@ -253,7 +309,7 @@ public class BJserver {
         if (!gameInProgress && allActivePlayersAreInState(PlayerState.READY)) {
             gameInProgress = true;
             System.out.println("=== GAME START ===");
-            broadcast("Game Start");
+            broadcast("GAME_START");
             return true;
         }
         return false;
@@ -287,9 +343,9 @@ public class BJserver {
             }
         }
 
-        // 全員の行動が完了したので、勝敗判定に移行
+        // 全員の行動が完了したので、ディーラーのカードを配布してから勝敗判定に移行
         showdownCalled = true;
-        judgeAndDistribute();
+        dealDealerCards();
     }
 
 
@@ -306,24 +362,68 @@ public class BJserver {
         List<Player> activePlayers = getActivePlayers();
         for (Player p : activePlayers) {
             p.setState(PlayerState.PLAYING); // 状態をPLAYINGに変更
-            p.sendMessage("Cards");
+            p.sendMessage("CARDS");
             for (int i = 0; i < 2; i++) {
                 card = cardlist.getCard();
                 p.setCard(card);
-                p.sendMessage(card);
+                p.sendMessage("PLAYER_CARD:" + card);
 
             }
-            p.sendMessage("Dealer Card " + dealerCardList.get(0));
+            p.sendMessage("DEALER_CARD:" + dealerCardList.get(0));
         }
+
+        //最初の人のターンにする
+        if (!activePlayers.isEmpty()) {
+            Player firstPlayer = activePlayers.get(0);
+            firstPlayer.sendMessage("YOUR_TURN");
+        }
+
+        // 全プレイヤーに他のプレイヤー情報を送信
+        broadcastOtherPlayersInfo();
+    }
+
+    // ディーラーのカードを配布する
+    private static void dealDealerCards() {
+        // ディーラーが17以上になるまでカードを引く
+        int dealerScore = calculateScore(dealerCardList);
+        while (dealerScore < 17) {
+            String card = cardlist.getCard();
+            dealerCardList.add(card);
+            dealerScore = calculateScore(dealerCardList);
+        }
+        
+        // 全プレイヤーにディーラーのカードを1枚ずつ送信（緊迫感を演出）
+        for (int i = 1; i < dealerCardList.size(); i++) {
+            final int cardIndex = i;
+            for (Player p : players) {
+                if (p.getOnlineState() && p.getState() != PlayerState.SPECTATOR && p.getState() != PlayerState.LOGOUT) {
+                    p.sendMessage("DEALER_CARD:" + dealerCardList.get(cardIndex));
+                }
+            }
+            
+            // 各カードの間に1秒の間隔を設ける
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        // 1秒待ってから勝敗判定を実行
+        new Thread(() -> {
+            try {
+                Thread.sleep(1000); // 1秒待機
+                judgeAndDistribute();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
     }
 
     private static void judgeAndDistribute() {
         int dealerScore = calculateScore(dealerCardList);
         boolean dealerBust = dealerScore > 21;
-
-        if (dealerBust) {
-            broadcast("Dealer Busted!");
-        }
 
         for (Player p : players) {
             if(p.getState() == PlayerState.SPECTATOR || p.getState() == PlayerState.LOGOUT) {
@@ -353,13 +453,17 @@ public class BJserver {
                 resultMessage = "You Lose. You lose " + p.getBet() + " chips.";
             }
 
-            // betが0のプレイヤーには結果を送信しない
-            if (p.getBet() > 0) {
-                 p.sendMessage(resultMessage);
-                 p.sendMessage("Your total chips: " + p.getChip());
+            // ゲームに参加したプレイヤーには結果を送信
+            if (p.getState() == PlayerState.PLAYING || p.getState() == PlayerState.STAND) {
+                 p.sendMessage("GAME_RESULT:" + resultMessage);
+                 p.sendMessage("CHIPS:" + p.getChip());
             }
         }
-
+		try {
+			Thread.sleep(3000);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
         // プレイヤーの継続意思を聞く
         askForContinuation();
     }
@@ -376,6 +480,7 @@ public class BJserver {
             if(playersInGame.contains(p)){
                 p.sendMessage("CONTINUE?");
             } else if (p.getState() == PlayerState.SPECTATOR) {
+				p.setState(PlayerState.WAITING);
                 p.sendMessage("SPECTATOR_NEXT_ROUND");
             }
         }
@@ -414,7 +519,7 @@ public class BJserver {
 
             for (Player p : getOnlinePlayers()) {
                 p.resetForNewRound();
-                p.sendMessage("Next round is starting. Please press 'Ready (OK)' to join.");
+                p.sendMessage("NEXT_ROUND");
             }
         }
     }
@@ -452,6 +557,18 @@ public class BJserver {
     private static void broadcast(String message) {
         for (Player p : players) {
             p.sendMessage(message);
+        }
+    }
+
+    /**
+     * 補助メソッド：全プレイヤーに他のプレイヤー情報を送信する
+     */
+    private static void broadcastOtherPlayersInfo() {
+        for (Player p : players) {
+            if (p.getOnlineState()) {
+                String otherPlayersInfo = getOtherPlayersInfo(p.getName());
+                p.sendMessage("OTHER_PLAYERS_INFO:" + otherPlayersInfo);
+            }
         }
     }
 }
