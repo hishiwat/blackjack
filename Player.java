@@ -7,10 +7,10 @@ public class Player {
     private int chip;
     private int bet;
     private PlayerState state;
+    private boolean _isOnline;
     private PrintWriter out;
     private ArrayList<String> cardList = new ArrayList<>();
-    private boolean _isOnline = true;
-    
+
     public Player(String name, int id, int chip, PrintWriter out) {
         this.name = name;
         this.id = id;
@@ -18,6 +18,7 @@ public class Player {
         this.bet = 0;
         this.state = PlayerState.WAITING;
         this.out = out;
+        this._isOnline = true;
     }
 
     public String getName() {
@@ -40,7 +41,7 @@ public class Player {
         return state;
     }
 
-     public boolean getOnlineState() {
+    public boolean getOnlineState() {
         return _isOnline;
     }
 
@@ -111,6 +112,10 @@ public class Player {
         this.chip += amount;
     }
 
+    public void setChip(int chip) {
+        this.chip = chip;
+    }
+
     public void resetForNewRound() {
         this.cardList.clear();
         this.bet = 0;
@@ -118,6 +123,6 @@ public class Player {
     }
 
     public void setOut(PrintWriter out) {
-        this._out = out;
+        this.out = out;
     }
 }
