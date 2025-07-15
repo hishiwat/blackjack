@@ -10,6 +10,7 @@ public class Player {
     private boolean _isOnline;
     private PrintWriter out;
     private ArrayList<String> cardList = new ArrayList<>();
+    private static final int RECHARGE_AMOUNT = 100;
 
     public Player(String name, int id, int chip, PrintWriter out) {
         this.name = name;
@@ -75,13 +76,13 @@ public class Player {
         int aceCount = 0;
 
         for (String card : cardList) {
-            String rank = card.substring(1); 
+            String rank = card.substring(1);
             switch (rank) {
                 case "J":
                 case "Q":
                 case "K":
                     total += 10;
-                break;
+                    break;
                 case "A":
                     total += 11;
                     aceCount++;
@@ -103,7 +104,6 @@ public class Player {
         cardList.add(card);
     }
 
-
     public void sendMessage(String message) {
         out.println(message);
     }
@@ -114,6 +114,12 @@ public class Player {
 
     public void setChip(int chip) {
         this.chip = chip;
+    }
+
+    public void rechargeChips() {
+        if (this.chip <= 0) {
+            this.chip = RECHARGE_AMOUNT;
+        }
     }
 
     public void resetForNewRound() {
