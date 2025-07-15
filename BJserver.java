@@ -118,7 +118,7 @@ public class BJserver {
                     if (line.equals("OK")) {
                         player.setState(PlayerState.READY);
                         if (!checkStartCondition())
-                            out.println("Waiting for all players to be ready...");
+                            out.println("WAIT");
                     }
 
                     if (line.startsWith("BET ")) {
@@ -147,7 +147,7 @@ public class BJserver {
                                     out.println("Bet accepted: " + betAmount);
 
                                     if (!checkAllPlayersBet())
-                                        out.println("Waiting for all players to bet...");
+                                        out.println("WAIT");
 
                                 } else {
                                     out.println("Invalid bet amount. You have " + player.getChip() + " chips.");
@@ -180,7 +180,8 @@ public class BJserver {
                     if (line.equals("STAND")) {
                         player.setState(PlayerState.STAND);
                         sendNextTurn(player); // 次の人にターンを移す
-                        checkShowdown();
+                        if (!checkShowdown())
+                            out.println("WAIT");
 
                         // 他のプレイヤー情報を更新
                         broadcastOtherPlayersInfo();
@@ -336,27 +337,28 @@ public class BJserver {
     }
 
     // 全員の行動が完了したかを確認し、一度だけ勝敗判定を呼び出す
-    private static synchronized void checkShowdown() {
+    private static synchronized boolean checkShowdown() {
         // 既に勝敗判定が呼び出されていれば何もしない
         if (showdownCalled) {
-            return;
+            return false;
         }
 
         List<Player> activePlayers = getActivePlayers();
         if (activePlayers.isEmpty()) {
-            return;
+            return false;
         }
 
         // まだ行動中のプレイヤー(PLAYING)がいるか確認
         for (Player p : activePlayers) {
             if (p.getState() == PlayerState.PLAYING) {
-                return; // 全員の行動完了を待つ
+                return false; // 全員の行動完了を待つ
             }
         }
 
         // 全員の行動が完了したので、ディーラーのカードを配布してから勝敗判定に移行
         showdownCalled = true;
         dealDealerCards();
+        return true;
     }
 
     // カード配布
