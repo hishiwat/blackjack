@@ -453,6 +453,10 @@ public class BJclient {
                             addMessage("The previous game has ended. You can join the next round.");
                             readyButton.setEnabled(true);
                         }
+
+                        if (message.equals("WAIT")) {
+                            gamePanel.createMessagePanel("Waiting for other players...");
+                        }
                     }
                 } catch (IOException e) {
                     SwingUtilities.invokeLater(() -> addMessage("Connection closed by server."));
@@ -525,6 +529,10 @@ public class BJclient {
             // プレイヤーのスコアを更新
             int playerScore = player.getScore();
             gamePanel.updatePlayerScore(playerScore);
+            if (playerScore > 21) {
+                addMessage("You Busted!");
+                gamePanel.createMessagePanel("You Busted!");
+            }
             frame.revalidate();
             frame.repaint();
         });

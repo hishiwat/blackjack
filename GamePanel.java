@@ -12,7 +12,7 @@ public class GamePanel {
     private JPanel actionPanel;
     private JPanel continuePanel;
     private JPanel resultPanel;
-    
+	private JPanel messagePanel;
     // ベット関連
     private JTextField betField;
     private JButton betButton;
@@ -162,7 +162,12 @@ public class GamePanel {
         if (continuePanel != null && continuePanel.getParent() != null) {
             continuePanel.getParent().remove(continuePanel);
         }
-        
+
+		// 既存のメッセージパネルを削除
+		if (messagePanel != null && messagePanel.getParent() != null) {
+			messagePanel.getParent().remove(messagePanel);
+		}
+
         betPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
         betPanel.setBackground(new Color(34, 139, 34));
         betPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -209,6 +214,11 @@ public class GamePanel {
         if (continuePanel != null && continuePanel.getParent() != null) {
             continuePanel.getParent().remove(continuePanel);
         }
+
+		// 既存のメッセージパネルを削除
+		if (messagePanel != null && messagePanel.getParent() != null) {
+			messagePanel.getParent().remove(messagePanel);
+		}
         
         actionPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 5));
         actionPanel.setBackground(new Color(34, 139, 34));
@@ -271,7 +281,12 @@ public class GamePanel {
         if (resultPanel != null && resultPanel.getParent() != null) {
             resultPanel.getParent().remove(resultPanel);
         }
-        
+
+		// 既存のメッセージパネルを削除
+		if (messagePanel != null && messagePanel.getParent() != null) {
+			messagePanel.getParent().remove(messagePanel);
+		}
+
         continuePanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 20, 5));
         continuePanel.setBackground(new Color(34, 139, 34));
         continuePanel.setBorder(BorderFactory.createCompoundBorder(
@@ -313,6 +328,11 @@ public class GamePanel {
             actionPanel.getParent().remove(actionPanel);
         }
 
+		// 既存のメッセージパネルを削除
+		if (messagePanel != null && messagePanel.getParent() != null) {
+			messagePanel.getParent().remove(messagePanel);
+		}
+
         resultPanel = new JPanel(new BorderLayout(10, 10));
         resultPanel.setBackground(new Color(34, 139, 34));
         resultPanel.setBorder(BorderFactory.createCompoundBorder(
@@ -338,6 +358,38 @@ public class GamePanel {
         resultPanel.add(centerPanel, BorderLayout.CENTER);
         
         gamePanel.add(resultPanel, BorderLayout.SOUTH);
+    }
+
+	public void createMessagePanel(String message) {
+        // 既存の結果パネルを削除
+        if (resultPanel != null && resultPanel.getParent() != null) {
+            resultPanel.getParent().remove(resultPanel);
+        }
+        
+        // 既存のアクションパネルを削除
+        if (actionPanel != null && actionPanel.getParent() != null) {
+            actionPanel.getParent().remove(actionPanel);
+        }
+
+        messagePanel = new JPanel(new BorderLayout(10, 10));
+        messagePanel.setBackground(new Color(34, 139, 34));
+        messagePanel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(new Color(255, 215, 0), 3),
+            BorderFactory.createEmptyBorder(15, 15, 15, 15)
+        ));
+        
+        // 結果メッセージ
+        JLabel messageLabel = new JLabel(message, SwingConstants.CENTER);
+        messageLabel.setForeground(Color.WHITE);
+        messageLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        
+        JPanel centerPanel = new JPanel(new GridLayout(2, 1, 5, 5));
+        centerPanel.setBackground(new Color(34, 139, 34));
+        centerPanel.add(messageLabel);
+        
+        messagePanel.add(centerPanel, BorderLayout.CENTER);
+        
+        gamePanel.add(messagePanel, BorderLayout.SOUTH);
     }
     
     public void addPlayerCard(String cardCode) {
