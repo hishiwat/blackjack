@@ -1,3 +1,5 @@
+package blackjack;
+
 public enum PlayerState {
     WAITING, // 初期状態
     READY, // 「OK」を送信した状態
